@@ -15,16 +15,27 @@ export class ScheduleService {
   // 医生列表
   private doctors = Array.from({ length: 14 }, (_, i) => `医生${i + 1}`)
   // 科室列表
-  private departments = Array.from({ length: 9 }, (_, i) => `科室${i + 1}`)
+  private departments = [
+    '1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室',
+    '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'
+  ]
 
   /**
    * 生成排班表
    * @param startDate 开始日期（YYYY-MM-DD）
    * @param doctors 医生列表
+   * @param dutyStartDoctor 值班起始医生
+   * @param leaveDoctors 请假医生列表
    */
-  generateSchedule(startDate: string, doctors?: string[]): ScheduleData {
-    // 使用用户输入的医生列表，如果没有则使用默认的医生1-医生14
+  generateSchedule(
+    startDate: string,
+    doctors?: string[],
+    dutyStartDoctor?: string,
+    leaveDoctors?: string[]
+  ): ScheduleData {
+    // 使用用户输入的医生列表，如果没有则使用默认的医生列表
     const doctorList = doctors && doctors.length > 0 ? doctors : this.doctors
+    const leaveList = leaveDoctors || []
 
     const dates = this.getDates(startDate, 7)
     const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
@@ -40,10 +51,10 @@ export class ScheduleService {
     })
 
     // 步骤1：生成值班表（优先）
-    this.generateDutySchedule(dates, dutySchedule, doctorList)
+    this.generateDutySchedule(dates, dutySchedule, doctorList, dutyStartDoctor, leaveList)
 
     // 步骤2：生成白班排班
-    this.generateDaySchedule(dates, schedule, dutySchedule, doctorList)
+    this.generateDaySchedule(dates, schedule, dutySchedule, doctorList, leaveList)
 
     return {
       dates,
@@ -68,22 +79,47 @@ export class ScheduleService {
   /**
    * 生成值班表
    * 按医生顺序轮换，记录值班医生和第二天强制休息
+   * @param dates 日期列表
+   * @param dutySchedule 值班表
+   * @param doctorList 医生列表
+   * @param dutyStartDoctor 值班起始医生
+   * @param leaveList 请假医生列表
    */
   private generateDutySchedule(
     dates: string[],
     dutySchedule: Record<string, string>,
-    doctorList: string[]
+    doctorList: string[],
+    dutyStartDoctor: string = '',
+    leaveList: string[] = []
   ): void {
-    let doctorIndex = 0
+    // 找到值班起始医生的索引
+    let startIndex = 0
+    if (dutyStartDoctor && doctorList.includes(dutyStartDoctor)) {
+      startIndex = doctorList.indexOf(dutyStartDoctor)
+    }
+
+    let doctorIndex = startIndex
 
     dates.forEach((date, index) => {
-      // 找到下一个可用的医生
-      while (true) {
+      // 找到下一个可用的医生（跳过请假医生）
+      let attempts = 0
+      let selectedDoctor = ''
+      
+      while (attempts < doctorList.length) {
         const doctor = doctorList[doctorIndex % doctorList.length]
-        dutySchedule[date] = doctor
-        doctorIndex = (doctorIndex + 1) % doctorList.length
-        break
+        
+        // 检查是否请假
+        if (!leaveList.includes(doctor)) {
+          selectedDoctor = doctor
+          break
+        }
+        
+        doctorIndex++
+        attempts++
       }
+
+      dutySchedule[date] = selectedDoctor
+      doctorIndex++
     })
 
     console.log('值班表生成完成:', dutySchedule)
@@ -96,7 +132,8 @@ export class ScheduleService {
     dates: string[],
     schedule: Record<string, Record<string, string>>,
     dutySchedule: Record<string, string>,
-    doctorList: string[]
+    doctorList: string[],
+    leaveList: string[]
   ): void {
     // 计算每个医生的工作天数（用于负载均衡）
     const doctorWorkDays: Record<string, number> = {}
@@ -124,7 +161,7 @@ export class ScheduleService {
       const dayOfWeek = new Date(date).getDay() // 0=周日, 1=周一, ..., 6=周六
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
 
-      // 周末至少3个科室，工作日9个科室
+      // 周末至少3个科室，工作日12个科室
       const departmentsToAssign = isWeekend
         ? this.departments.slice(0, 3)
         : [...this.departments]
@@ -135,8 +172,9 @@ export class ScheduleService {
           date,
           doctorWorkDays,
           doctorRestDays,
-          isWeekend ? 3 : 9, // 周末3个科室，工作日9个科室
-          doctorList
+          isWeekend ? 3 : 12, // 周末3个科室，工作日12个科室
+          doctorList,
+          leaveList
         )
 
         if (availableDoctors.length > 0) {
@@ -159,12 +197,18 @@ export class ScheduleService {
     doctorWorkDays: Record<string, number>,
     doctorRestDays: Record<string, Set<string>>,
     totalDepartments: number,
-    doctorList: string[]
+    doctorList: string[],
+    leaveList: string[]
   ): string[] {
     const available: string[] = []
     const dayOfWeek = new Date(date).getDay()
 
     doctorList.forEach(doctor => {
+      // 检查是否请假
+      if (leaveList.includes(doctor)) {
+        return
+      }
+
       // 检查是否在休息
       if (doctorRestDays[doctor]?.has(date)) {
         return
@@ -172,7 +216,7 @@ export class ScheduleService {
 
       // 计算该医生本周已工作天数（不包括当天）
       const workDays = doctorWorkDays[doctor] || 0
-      const maxWorkDays = 5 - totalDepartments / 9 // 根据科室数量调整最大工作天数
+      const maxWorkDays = 5 - totalDepartments / 12 // 根据科室数量调整最大工作天数
 
       // 工作天数限制（每周最多工作5天，至少休息2天）
       if (workDays >= 5) {

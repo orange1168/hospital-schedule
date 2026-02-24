@@ -4,6 +4,8 @@ import { ScheduleService } from './schedule.service'
 interface GenerateScheduleDto {
   startDate: string
   doctors?: string[]
+  dutyStartDoctor?: string
+  leaveDoctors?: string[]
 }
 
 interface DownloadDocDto {
@@ -21,7 +23,7 @@ export class ScheduleController {
   @Post('generate')
   generateSchedule(@Body() body: GenerateScheduleDto) {
     console.log('收到排班生成请求:', body)
-    const { startDate, doctors } = body
+    const { startDate, doctors, dutyStartDoctor, leaveDoctors } = body
 
     if (!startDate) {
       return {
@@ -32,7 +34,7 @@ export class ScheduleController {
     }
 
     try {
-      const scheduleData = this.scheduleService.generateSchedule(startDate, doctors)
+      const scheduleData = this.scheduleService.generateSchedule(startDate, doctors, dutyStartDoctor, leaveDoctors)
       console.log('排班生成成功:', scheduleData)
 
       return {
