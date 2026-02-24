@@ -32,8 +32,10 @@ const IndexPage = () => {
   
   const [startDate, setStartDate] = useState('')
   const [selectedDoctors, setSelectedDoctors] = useState<string[]>([])
+  const [customDoctors, setCustomDoctors] = useState<string[]>([])
   const [dutyStartDoctor, setDutyStartDoctor] = useState<string>('')
-  const [leaveDoctors, setLeaveDoctors] = useState<string[]>([])
+  const [showCustomInput, setShowCustomInput] = useState(false)
+  const [customDoctorName, setCustomDoctorName] = useState('')
   const [loading, setLoading] = useState(false)
 
   // 生成排班
@@ -48,7 +50,7 @@ const IndexPage = () => {
 
     if (selectedDoctors.length === 0) {
       Taro.showToast({
-        title: '请至少添加一名医生',
+        title: '请至少选择一名医生',
         icon: 'none'
       })
       return
@@ -65,7 +67,7 @@ const IndexPage = () => {
     setLoading(true)
 
     try {
-      console.log('开始生成排班，参数:', { startDate, doctors: selectedDoctors, dutyStartDoctor, leaveDoctors })
+      console.log('开始生成排班，参数:', { startDate, doctors: selectedDoctors, dutyStartDoctor })
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
@@ -73,7 +75,7 @@ const IndexPage = () => {
           startDate,
           doctors: selectedDoctors,
           dutyStartDoctor,
-          leaveDoctors
+          leaveDoctors: []
         }
       })
       console.log('排班生成响应:', res.data)
@@ -124,7 +126,6 @@ const IndexPage = () => {
       console.log('文档下载响应:', res.data)
 
       if (res.data.code === 200) {
-        // H5端：创建下载链接
         const isH5 = Taro.getEnv() === 'WEB'
         if (isH5) {
           const base64Data = res.data.data.fileData
@@ -157,54 +158,68 @@ const IndexPage = () => {
     }
   }
 
-  // 添加单个医生
-  const handleAddSingleDoctor = (doctor: string) => {
+  // 切换医生选择状态
+  const handleToggleDoctor = (doctor: string) => {
     if (selectedDoctors.includes(doctor)) {
-      return
+      // 如果是值班起始医生，清空
+      if (dutyStartDoctor === doctor) {
+        setDutyStartDoctor('')
+      }
+      setSelectedDoctors(selectedDoctors.filter(d => d !== doctor))
+    } else {
+      setSelectedDoctors([...selectedDoctors, doctor])
     }
-    setSelectedDoctors([...selectedDoctors, doctor])
   }
 
-  // 添加医生（从固定列表中添加）
-  const handleAddDoctor = () => {
-    const availableDoctors = FIXED_DOCTORS.filter(d => !selectedDoctors.includes(d))
-    if (availableDoctors.length === 0) {
+  // 移除医生
+  const handleRemoveDoctor = (doctor: string) => {
+    if (dutyStartDoctor === doctor) {
+      setDutyStartDoctor('')
+    }
+    setSelectedDoctors(selectedDoctors.filter(d => d !== doctor))
+    // 如果是自定义医生，也从自定义列表中移除
+    if (customDoctors.includes(doctor)) {
+      setCustomDoctors(customDoctors.filter(d => d !== doctor))
+    }
+  }
+
+  // 添加自定义医生
+  const handleAddCustomDoctor = () => {
+    if (!customDoctorName.trim()) {
       Taro.showToast({
-        title: '所有医生都已添加',
+        title: '请输入医生姓名',
         icon: 'none'
       })
       return
     }
 
-    Taro.showActionSheet({
-      itemList: availableDoctors,
-      success: (res) => {
-        if (res.tapIndex !== undefined) {
-          const doctorToAdd = availableDoctors[res.tapIndex]
-          setSelectedDoctors([...selectedDoctors, doctorToAdd])
-          Taro.showToast({
-            title: `已添加${doctorToAdd}`,
-            icon: 'success'
-          })
-        }
-      }
-    })
-  }
-
-  // 移除医生
-  const handleRemoveDoctor = (doctor: string) => {
-    setSelectedDoctors(selectedDoctors.filter(d => d !== doctor))
-    if (dutyStartDoctor === doctor) {
-      setDutyStartDoctor(selectedDoctors[0] || '')
+    if (customDoctors.includes(customDoctorName.trim()) || FIXED_DOCTORS.includes(customDoctorName.trim())) {
+      Taro.showToast({
+        title: '该医生已存在',
+        icon: 'none'
+      })
+      return
     }
-    setLeaveDoctors(leaveDoctors.filter(d => d !== doctor))
+
+    const newDoctor = customDoctorName.trim()
+    setCustomDoctors([...customDoctors, newDoctor])
+    setCustomDoctorName('')
+    setShowCustomInput(false)
+    
+    // 自动选择新添加的医生
+    setSelectedDoctors([...selectedDoctors, newDoctor])
+    
+    Taro.showToast({
+      title: '添加成功',
+      icon: 'success'
+    })
   }
 
   // 选择值班起始医生
   const handleSelectDutyStartDoctor = () => {
     if (selectedDoctors.length === 0) {
       Taro.showToast({
-        title: '请先添加医生',
+        title: '请先选择排班医生',
         icon: 'none'
       })
       return
@@ -215,39 +230,6 @@ const IndexPage = () => {
       success: (res) => {
         if (res.tapIndex !== undefined) {
           setDutyStartDoctor(selectedDoctors[res.tapIndex])
-        }
-      }
-    })
-  }
-
-  // 选择请假医生
-  const handleSelectLeaveDoctors = () => {
-    if (selectedDoctors.length === 0) {
-      Taro.showToast({
-        title: '请先添加医生',
-        icon: 'none'
-      })
-      return
-    }
-
-    Taro.showActionSheet({
-      itemList: selectedDoctors,
-      success: (res) => {
-        if (res.tapIndex !== undefined) {
-          const doctor = selectedDoctors[res.tapIndex]
-          if (leaveDoctors.includes(doctor)) {
-            setLeaveDoctors(leaveDoctors.filter(d => d !== doctor))
-            Taro.showToast({
-              title: `已取消${doctor}的请假`,
-              icon: 'none'
-            })
-          } else {
-            setLeaveDoctors([...leaveDoctors, doctor])
-            Taro.showToast({
-              title: `${doctor}已请假`,
-              icon: 'none'
-            })
-          }
         }
       }
     })
@@ -280,94 +262,128 @@ const IndexPage = () => {
               className="flex-1 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200" 
               onClick={handleSelectDutyStartDoctor}
             >
-              <Text className="block text-sm text-blue-600">{dutyStartDoctor || '请选择'}</Text>
+              <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
             </View>
           </View>
 
-          {/* 请假医生 */}
-          <View className="flex flex-row items-center gap-2">
-            <Text className="block text-sm font-medium w-24">请假医生：</Text>
-            <View 
-              className="flex-1 bg-red-50 rounded-lg px-3 py-2 border border-red-200" 
-              onClick={handleSelectLeaveDoctors}
-            >
-              <Text className="block text-sm text-red-600">
-                {leaveDoctors.length > 0 ? leaveDoctors.join('、') : '点击选择（可多选）'}
-              </Text>
-            </View>
-          </View>
-
-          {/* 医生列表 */}
+          {/* 可选医生区域 */}
           <View className="flex flex-col gap-2">
             <View className="flex flex-row items-center justify-between">
-              <Text className="block text-sm font-medium">可选医生（{FIXED_DOCTORS.length}人）：</Text>
+              <Text className="block text-sm font-medium">选择排班医生：</Text>
               <Button
                 className="px-4 py-2 bg-green-500 text-white rounded-lg text-xs"
-                onClick={handleAddDoctor}
+                onClick={() => setShowCustomInput(!showCustomInput)}
               >
-                + 添加医生
+                + 自定义医生
               </Button>
             </View>
 
-            {/* 显示所有可选医生 */}
+            {/* 自定义医生输入框 */}
+            {showCustomInput && (
+              <View className="flex flex-row gap-2 items-center bg-green-50 p-2 rounded-lg">
+                <View className="flex-1 bg-white rounded px-3 py-2">
+                  <input
+                    className="w-full text-sm bg-transparent outline-none"
+                    placeholder="输入医生姓名"
+                    value={customDoctorName}
+                    onChange={(e) => setCustomDoctorName(e.target.value)}
+                  />
+                </View>
+                <Button
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg text-xs"
+                  onClick={handleAddCustomDoctor}
+                >
+                  添加
+                </Button>
+                <Button
+                  className="px-4 py-2 bg-gray-500 text-white rounded-lg text-xs"
+                  onClick={() => {
+                    setShowCustomInput(false)
+                    setCustomDoctorName('')
+                  }}
+                >
+                  取消
+                </Button>
+              </View>
+            )}
+
+            {/* 固定医生列表 */}
             <View className="bg-gray-50 rounded-lg p-3">
+              <Text className="block text-xs text-gray-500 mb-2">固定医生（14人）：</Text>
               <View className="flex flex-row flex-wrap gap-2">
                 {FIXED_DOCTORS.map((doctor) => {
                   const isSelected = selectedDoctors.includes(doctor)
                   return (
                     <View
                       key={doctor}
-                      className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs cursor-pointer ${
+                      className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs ${
                         isSelected
-                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
                           : 'bg-white text-gray-600 border border-gray-300'
                       }`}
-                      onClick={() => isSelected ? handleRemoveDoctor(doctor) : handleAddSingleDoctor(doctor)}
+                      onClick={() => handleToggleDoctor(doctor)}
                     >
                       <Text className="block text-xs">{doctor}</Text>
-                      {isSelected && (
-                        <Text className="block text-xs ml-1 text-green-600">✓</Text>
-                      )}
                     </View>
                   )
                 })}
               </View>
             </View>
 
-            {/* 已选择的医生标签 */}
+            {/* 自定义医生列表 */}
+            {customDoctors.length > 0 && (
+              <View className="bg-green-50 rounded-lg p-3">
+                <Text className="block text-xs text-gray-500 mb-2">自定义医生（{customDoctors.length}人）：</Text>
+                <View className="flex flex-row flex-wrap gap-2">
+                  {customDoctors.map((doctor) => {
+                    const isSelected = selectedDoctors.includes(doctor)
+                    return (
+                      <View
+                        key={doctor}
+                        className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs ${
+                          isSelected
+                            ? 'bg-green-100 text-green-700 border border-green-300'
+                            : 'bg-white text-gray-600 border border-gray-300'
+                        }`}
+                        onClick={() => handleToggleDoctor(doctor)}
+                      >
+                        <Text className="block text-xs">{doctor}</Text>
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* 已选择的医生 */}
             {selectedDoctors.length > 0 && (
-              <View className="flex flex-col gap-1">
-                <Text className="block text-xs text-gray-500">已选择 {selectedDoctors.length} 人：</Text>
+              <View className="bg-blue-50 rounded-lg p-3">
+                <Text className="block text-xs text-gray-500 mb-2">
+                  已选择 {selectedDoctors.length} 人：
+                  {dutyStartDoctor && ` <span className="text-blue-600">（值班起始：${dutyStartDoctor}）</span>`}
+                </Text>
                 <View className="flex flex-row flex-wrap gap-2">
                   {selectedDoctors.map((doctor) => (
                     <View
                       key={doctor}
                       className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs ${
-                        leaveDoctors.includes(doctor)
-                          ? 'bg-red-100 text-red-600'
-                          : doctor === dutyStartDoctor
-                          ? 'bg-blue-100 text-blue-600'
-                          : 'bg-gray-100 text-gray-700'
+                        doctor === dutyStartDoctor
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-blue-200 text-blue-800'
                       }`}
                     >
                       <Text className="block text-xs">{doctor}</Text>
                       <View
                         className="ml-1 w-4 h-4 rounded-full bg-white flex items-center justify-center"
-                        onClick={() => handleRemoveDoctor(doctor)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveDoctor(doctor)
+                        }}
                       >
-                        <Text className="block text-xs text-gray-400">×</Text>
+                        <Text className="block text-xs text-blue-600">×</Text>
                       </View>
                     </View>
                   ))}
-                </View>
-
-                <View className="flex flex-col gap-1 mt-1">
-                  <Text className="block text-xs text-gray-500">
-                    <Text className="text-blue-600">●</Text> 蓝色：值班起始医生
-                  </Text>
-                  <Text className="block text-xs text-gray-500">
-                    <Text className="text-red-600">●</Text> 红色：请假医生
-                  </Text>
                 </View>
               </View>
             )}
