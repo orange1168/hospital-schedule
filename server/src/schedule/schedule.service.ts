@@ -3,9 +3,11 @@ import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, Bor
 
 export interface ScheduleData {
   dates: string[]
+  datesWithWeek: string[]
   departments: string[]
   schedule: Record<string, Record<string, string>>
   dutySchedule: Record<string, string>
+  doctorSchedule: Record<string, Record<string, string>>
 }
 
 @Injectable()
@@ -18,9 +20,14 @@ export class ScheduleService {
   /**
    * 生成排班表
    * @param startDate 开始日期（YYYY-MM-DD）
+   * @param doctors 医生列表
    */
-  generateSchedule(startDate: string): ScheduleData {
+  generateSchedule(startDate: string, doctors?: string[]): ScheduleData {
+    // 使用用户输入的医生列表，如果没有则使用默认的医生1-医生14
+    const doctorList = doctors && doctors.length > 0 ? doctors : this.doctors
+
     const dates = this.getDates(startDate, 7)
+    const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
     const schedule: Record<string, Record<string, string>> = {}
     const dutySchedule: Record<string, string> = {}
 
@@ -33,32 +40,48 @@ export class ScheduleService {
     })
 
     // 步骤1：生成值班表（优先）
-    this.generateDutySchedule(dates, dutySchedule)
+    this.generateDutySchedule(dates, dutySchedule, doctorList)
 
     // 步骤2：生成白班排班
-    this.generateDaySchedule(dates, schedule, dutySchedule)
+    this.generateDaySchedule(dates, schedule, dutySchedule, doctorList)
 
     return {
       dates,
+      datesWithWeek,
       departments: this.departments,
       schedule,
-      dutySchedule
+      dutySchedule,
+      doctorSchedule: {} // 可选：如果需要单独存储医生排班
     }
+  }
+
+  /**
+   * 获取日期和星期
+   */
+  private getDateWithWeek(date: string): string {
+    const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const dateObj = new Date(date)
+    const weekDay = weekDays[dateObj.getDay()]
+    return `${date} ${weekDay}`
   }
 
   /**
    * 生成值班表
    * 按医生顺序轮换，记录值班医生和第二天强制休息
    */
-  private generateDutySchedule(dates: string[], dutySchedule: Record<string, string>): void {
+  private generateDutySchedule(
+    dates: string[],
+    dutySchedule: Record<string, string>,
+    doctorList: string[]
+  ): void {
     let doctorIndex = 0
 
     dates.forEach((date, index) => {
       // 找到下一个可用的医生
       while (true) {
-        const doctor = this.doctors[doctorIndex]
+        const doctor = doctorList[doctorIndex % doctorList.length]
         dutySchedule[date] = doctor
-        doctorIndex = (doctorIndex + 1) % this.doctors.length
+        doctorIndex = (doctorIndex + 1) % doctorList.length
         break
       }
     })
@@ -72,17 +95,18 @@ export class ScheduleService {
   private generateDaySchedule(
     dates: string[],
     schedule: Record<string, Record<string, string>>,
-    dutySchedule: Record<string, string>
+    dutySchedule: Record<string, string>,
+    doctorList: string[]
   ): void {
     // 计算每个医生的工作天数（用于负载均衡）
     const doctorWorkDays: Record<string, number> = {}
-    this.doctors.forEach(doctor => {
+    doctorList.forEach(doctor => {
       doctorWorkDays[doctor] = 0
     })
 
     // 记录医生的休息日（每周2天 + 值班后的强制休息）
     const doctorRestDays: Record<string, Set<string>> = {}
-    this.doctors.forEach(doctor => {
+    doctorList.forEach(doctor => {
       doctorRestDays[doctor] = new Set()
     })
 
@@ -101,8 +125,8 @@ export class ScheduleService {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
 
       // 周末至少3个科室，工作日9个科室
-      const departmentsToAssign = isWeekend 
-        ? this.departments.slice(0, 3) 
+      const departmentsToAssign = isWeekend
+        ? this.departments.slice(0, 3)
         : [...this.departments]
 
       // 为每个科室分配医生
@@ -111,7 +135,8 @@ export class ScheduleService {
           date,
           doctorWorkDays,
           doctorRestDays,
-          isWeekend ? 3 : 9 // 周末3个科室，工作日9个科室
+          isWeekend ? 3 : 9, // 周末3个科室，工作日9个科室
+          doctorList
         )
 
         if (availableDoctors.length > 0) {
@@ -133,19 +158,20 @@ export class ScheduleService {
     date: string,
     doctorWorkDays: Record<string, number>,
     doctorRestDays: Record<string, Set<string>>,
-    totalDepartments: number
+    totalDepartments: number,
+    doctorList: string[]
   ): string[] {
     const available: string[] = []
     const dayOfWeek = new Date(date).getDay()
 
-    this.doctors.forEach(doctor => {
+    doctorList.forEach(doctor => {
       // 检查是否在休息
-      if (doctorRestDays[doctor].has(date)) {
+      if (doctorRestDays[doctor]?.has(date)) {
         return
       }
 
       // 计算该医生本周已工作天数（不包括当天）
-      const workDays = doctorWorkDays[doctor]
+      const workDays = doctorWorkDays[doctor] || 0
       const maxWorkDays = 5 - totalDepartments / 9 // 根据科室数量调整最大工作天数
 
       // 工作天数限制（每周最多工作5天，至少休息2天）
@@ -199,6 +225,9 @@ export class ScheduleService {
    * 生成Word文档
    */
   async generateWordDoc(scheduleData: ScheduleData, startDate: string): Promise<Buffer> {
+    // 获取医生列表
+    const doctorsList = this.getDoctorsList(scheduleData)
+
     const doc = new Document({
       sections: [
         {
@@ -243,7 +272,7 @@ export class ScheduleService {
             new Paragraph({
               children: [
                 new TextRun({
-                  text: '白班排班',
+                  text: '白班排班（科室）',
                   bold: true,
                   size: 28,
                 }),
@@ -254,6 +283,20 @@ export class ScheduleService {
               },
             }),
             this.createScheduleTable(scheduleData),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '医生排班',
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+              spacing: {
+                before: 400,
+                after: 200,
+              },
+            }),
+            this.createDoctorScheduleTable(scheduleData, doctorsList),
           ],
         },
       ],
@@ -261,6 +304,31 @@ export class ScheduleService {
 
     const buffer = await Packer.toBuffer(doc)
     return buffer
+  }
+
+  /**
+   * 获取医生列表
+   */
+  private getDoctorsList(scheduleData: ScheduleData): string[] {
+    const doctorsSet = new Set<string>()
+
+    // 从排班表中提取医生
+    Object.values(scheduleData.schedule).forEach(daySchedule => {
+      Object.values(daySchedule).forEach(doctor => {
+        if (doctor && doctor !== '休息') {
+          doctorsSet.add(doctor)
+        }
+      })
+    })
+
+    // 添加值班医生
+    Object.values(scheduleData.dutySchedule).forEach(doctor => {
+      if (doctor) {
+        doctorsSet.add(doctor)
+      }
+    })
+
+    return Array.from(doctorsSet)
   }
 
   /**
@@ -287,12 +355,12 @@ export class ScheduleService {
     )
 
     // 数据行
-    scheduleData.dates.forEach(date => {
+    scheduleData.dates.forEach((date, index) => {
       rows.push(
         new TableRow({
           children: [
             new TableCell({
-              children: [new Paragraph({ children: [new TextRun({ text: date })] })],
+              children: [new Paragraph({ children: [new TextRun({ text: scheduleData.datesWithWeek[index] })] })],
               width: { size: 30, type: WidthType.PERCENTAGE },
             }),
             new TableCell({
@@ -323,6 +391,85 @@ export class ScheduleService {
   }
 
   /**
+   * 创建医生排班表
+   */
+  private createDoctorScheduleTable(scheduleData: ScheduleData, doctorsList: string[]): Table {
+    const rows: TableRow[] = []
+
+    // 表头
+    const headerCells: TableCell[] = [
+      new TableCell({
+        children: [new Paragraph({ children: [new TextRun({ text: '医生', bold: true })] })],
+        width: { size: 15, type: WidthType.PERCENTAGE },
+      })
+    ]
+
+    scheduleData.datesWithWeek.forEach(date => {
+      headerCells.push(
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })],
+          width: { size: (85 / scheduleData.datesWithWeek.length), type: WidthType.PERCENTAGE },
+        })
+      )
+    })
+
+    rows.push(new TableRow({
+      children: headerCells,
+      tableHeader: true,
+    }))
+
+    // 数据行
+    doctorsList.forEach(doctor => {
+      const rowCells: TableCell[] = [
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: doctor, bold: true })] })],
+          width: { size: 15, type: WidthType.PERCENTAGE },
+        }),
+      ]
+
+      scheduleData.dates.forEach(date => {
+        // 查找该医生当天的科室
+        const department = Object.entries(scheduleData.schedule[date] || {})
+          .find(([_, doc]) => doc === doctor)?.[0] || null
+
+        // 检查是否是值班
+        const isDuty = scheduleData.dutySchedule[date] === doctor
+
+        let cellText = '休息'
+        if (isDuty) {
+          cellText = '值班'
+        } else if (department) {
+          cellText = department
+        }
+
+        rowCells.push(
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: cellText })] })],
+            width: { size: (85 / scheduleData.dates.length), type: WidthType.PERCENTAGE },
+          })
+        )
+      })
+
+      rows.push(new TableRow({
+        children: rowCells,
+      }))
+    })
+
+    return new Table({
+      rows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1 },
+        bottom: { style: BorderStyle.SINGLE, size: 1 },
+        left: { style: BorderStyle.SINGLE, size: 1 },
+        right: { style: BorderStyle.SINGLE, size: 1 },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+      },
+    })
+  }
+
+  /**
    * 创建排班表
    */
   private createScheduleTable(scheduleData: ScheduleData): Table {
@@ -336,11 +483,11 @@ export class ScheduleService {
       })
     ]
 
-    scheduleData.dates.forEach(date => {
+    scheduleData.datesWithWeek.forEach(date => {
       headerCells.push(
         new TableCell({
           children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })],
-          width: { size: (85 / scheduleData.dates.length), type: WidthType.PERCENTAGE },
+          width: { size: (85 / scheduleData.datesWithWeek.length), type: WidthType.PERCENTAGE },
         })
       )
     })
