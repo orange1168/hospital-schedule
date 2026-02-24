@@ -157,12 +157,14 @@ const IndexPage = () => {
         <View className="flex flex-col gap-3">
           <View className="flex flex-row items-center gap-2">
             <Text className="block text-sm font-medium w-24">开始日期：</Text>
-            <Input
-              className="flex-1 bg-gray-50 rounded-lg px-3 py-2 text-sm"
-              value={startDate}
-              placeholder="请选择日期 (YYYY-MM-DD)"
-              onInput={(e) => setStartDate(e.detail.value)}
-            />
+            <View className="flex-1 bg-gray-50 rounded-lg px-3 py-2">
+              <Input
+                className="w-full bg-transparent text-sm"
+                value={startDate}
+                placeholder="请选择日期 (YYYY-MM-DD)"
+                onInput={(e) => setStartDate(e.detail.value)}
+              />
+            </View>
           </View>
 
           <View className="flex flex-row gap-2">
@@ -239,13 +241,16 @@ const IndexPage = () => {
                           onClick={() => handleCellClick(date, department)}
                         >
                           {isEditing ? (
-                            <Input
-                              className="w-full h-8 text-center text-xs border border-blue-500 rounded"
-                              value={editingValue}
-                              onInput={(e) => setEditingValue(e.detail.value)}
-                              onBlur={handleSaveEdit}
-                              onConfirm={handleSaveEdit}
-                            />
+                            <View className="w-full h-8 border border-blue-500 rounded flex items-center justify-center">
+                              <Input
+                                className="w-full text-center text-xs bg-transparent"
+                                style={{ height: '32px' }}
+                                value={editingValue}
+                                onInput={(e) => setEditingValue(e.detail.value)}
+                                onBlur={handleSaveEdit}
+                                onConfirm={handleSaveEdit}
+                              />
+                            </View>
                           ) : (
                             <Text className={`text-xs ${cellValue ? 'text-gray-800' : 'text-gray-400'}`}>
                               {cellValue || '休息'}
