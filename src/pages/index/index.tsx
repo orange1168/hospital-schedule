@@ -1,4 +1,4 @@
-import { View, Text, Button, ScrollView, Picker } from '@tarojs/components'
+import { View, Text, Button, ScrollView, Picker, Input } from '@tarojs/components'
 import { useState } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
@@ -282,11 +282,11 @@ const IndexPage = () => {
             {showCustomInput && (
               <View className="flex flex-row gap-2 items-center bg-green-50 p-2 rounded-lg">
                 <View className="flex-1 bg-white rounded px-3 py-2">
-                  <input
-                    className="w-full text-sm bg-transparent outline-none"
+                  <Input
+                    className="w-full text-sm bg-transparent"
                     placeholder="输入医生姓名"
                     value={customDoctorName}
-                    onChange={(e) => setCustomDoctorName(e.target.value)}
+                    onInput={(e) => setCustomDoctorName(e.detail.value)}
                   />
                 </View>
                 <Button
