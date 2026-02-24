@@ -157,6 +157,14 @@ const IndexPage = () => {
     }
   }
 
+  // 添加单个医生
+  const handleAddSingleDoctor = (doctor: string) => {
+    if (selectedDoctors.includes(doctor)) {
+      return
+    }
+    setSelectedDoctors([...selectedDoctors, doctor])
+  }
+
   // 添加医生（从固定列表中添加）
   const handleAddDoctor = () => {
     const availableDoctors = FIXED_DOCTORS.filter(d => !selectedDoctors.includes(d))
@@ -292,46 +300,75 @@ const IndexPage = () => {
           {/* 医生列表 */}
           <View className="flex flex-col gap-2">
             <View className="flex flex-row items-center justify-between">
-              <Text className="block text-sm font-medium">排班医生：</Text>
+              <Text className="block text-sm font-medium">可选医生（{FIXED_DOCTORS.length}人）：</Text>
               <Button
-                className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm"
+                className="px-4 py-2 bg-green-500 text-white rounded-lg text-xs"
                 onClick={handleAddDoctor}
               >
                 + 添加医生
               </Button>
             </View>
 
-            <View className="flex flex-row flex-wrap gap-2">
-              {selectedDoctors.map((doctor) => (
-                <View
-                  key={doctor}
-                  className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs ${
-                    leaveDoctors.includes(doctor)
-                      ? 'bg-red-100 text-red-600'
-                      : doctor === dutyStartDoctor
-                      ? 'bg-blue-100 text-blue-600'
-                      : 'bg-gray-100 text-gray-700'
-                  }`}
-                >
-                  <Text className="block text-xs">{doctor}</Text>
-                  <View
-                    className="ml-1 w-4 h-4 rounded-full bg-white flex items-center justify-center"
-                    onClick={() => handleRemoveDoctor(doctor)}
-                  >
-                    <Text className="block text-xs text-gray-400">×</Text>
-                  </View>
-                </View>
-              ))}
+            {/* 显示所有可选医生 */}
+            <View className="bg-gray-50 rounded-lg p-3">
+              <View className="flex flex-row flex-wrap gap-2">
+                {FIXED_DOCTORS.map((doctor) => {
+                  const isSelected = selectedDoctors.includes(doctor)
+                  return (
+                    <View
+                      key={doctor}
+                      className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs cursor-pointer ${
+                        isSelected
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'bg-white text-gray-600 border border-gray-300'
+                      }`}
+                      onClick={() => isSelected ? handleRemoveDoctor(doctor) : handleAddSingleDoctor(doctor)}
+                    >
+                      <Text className="block text-xs">{doctor}</Text>
+                      {isSelected && (
+                        <Text className="block text-xs ml-1 text-green-600">✓</Text>
+                      )}
+                    </View>
+                  )
+                })}
+              </View>
             </View>
 
+            {/* 已选择的医生标签 */}
             {selectedDoctors.length > 0 && (
-              <View className="flex flex-col gap-1 mt-1">
-                <Text className="block text-xs text-gray-500">
-                  <Text className="text-blue-600">●</Text> 蓝色：值班起始医生
-                </Text>
-                <Text className="block text-xs text-gray-500">
-                  <Text className="text-red-600">●</Text> 红色：请假医生
-                </Text>
+              <View className="flex flex-col gap-1">
+                <Text className="block text-xs text-gray-500">已选择 {selectedDoctors.length} 人：</Text>
+                <View className="flex flex-row flex-wrap gap-2">
+                  {selectedDoctors.map((doctor) => (
+                    <View
+                      key={doctor}
+                      className={`flex flex-row items-center gap-1 px-3 py-1.5 rounded-full text-xs ${
+                        leaveDoctors.includes(doctor)
+                          ? 'bg-red-100 text-red-600'
+                          : doctor === dutyStartDoctor
+                          ? 'bg-blue-100 text-blue-600'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <Text className="block text-xs">{doctor}</Text>
+                      <View
+                        className="ml-1 w-4 h-4 rounded-full bg-white flex items-center justify-center"
+                        onClick={() => handleRemoveDoctor(doctor)}
+                      >
+                        <Text className="block text-xs text-gray-400">×</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                <View className="flex flex-col gap-1 mt-1">
+                  <Text className="block text-xs text-gray-500">
+                    <Text className="text-blue-600">●</Text> 蓝色：值班起始医生
+                  </Text>
+                  <Text className="block text-xs text-gray-500">
+                    <Text className="text-red-600">●</Text> 红色：请假医生
+                  </Text>
+                </View>
               </View>
             )}
           </View>
