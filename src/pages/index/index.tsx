@@ -1,4 +1,4 @@
-import { View, Text, Input, Button, ScrollView, Picker } from '@tarojs/components'
+import { View, Text, Button, ScrollView, Picker } from '@tarojs/components'
 import { useState } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
@@ -8,9 +8,17 @@ interface ScheduleData {
   dates: string[]
   datesWithWeek: string[]
   departments: string[]
-  schedule: Record<string, Record<string, string>>
+  schedule: Record<string, Record<string, Array<{ doctor: string; shift: 'morning' | 'afternoon' | 'night' | 'off'; department?: string }>>>
   dutySchedule: Record<string, string>
-  doctorSchedule: Record<string, Record<string, string>>
+  doctorSchedule: Record<string, {
+    name: string
+    shifts: Record<string, 'morning' | 'afternoon' | 'night' | 'off'>
+    morningShifts: string[]
+    afternoonShifts: string[]
+    nightShifts: number
+    restDays: number
+  }>
+  useHalfDay: boolean
 }
 
 // 固定的医生列表
@@ -21,11 +29,10 @@ const FIXED_DOCTORS = [
 
 const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
-  const [editingCell, setEditingCell] = useState<{ date: string; department: string } | null>(null)
-  const [editingValue, setEditingValue] = useState('')
+  
   const [startDate, setStartDate] = useState('')
-  const [selectedDoctors, setSelectedDoctors] = useState<string[]>([...FIXED_DOCTORS])
-  const [dutyStartDoctor, setDutyStartDoctor] = useState('李茜')
+  const [selectedDoctors, setSelectedDoctors] = useState<string[]>([])
+  const [dutyStartDoctor, setDutyStartDoctor] = useState<string>('')
   const [leaveDoctors, setLeaveDoctors] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -41,15 +48,24 @@ const IndexPage = () => {
 
     if (selectedDoctors.length === 0) {
       Taro.showToast({
-        title: '请至少选择一个医生',
+        title: '请至少添加一名医生',
+        icon: 'none'
+      })
+      return
+    }
+
+    if (!dutyStartDoctor) {
+      Taro.showToast({
+        title: '请选择值班起始医生',
         icon: 'none'
       })
       return
     }
 
     setLoading(true)
+
     try {
-      console.log('开始生成排班，起始日期:', startDate, '医生列表:', selectedDoctors, '值班起始医生:', dutyStartDoctor, '请假医生:', leaveDoctors)
+      console.log('开始生成排班，参数:', { startDate, doctors: selectedDoctors, dutyStartDoctor, leaveDoctors })
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
@@ -77,7 +93,7 @@ const IndexPage = () => {
     } catch (error) {
       console.error('排班生成失败:', error)
       Taro.showToast({
-        title: '排班生成失败',
+        title: error?.message || '排班生成失败',
         icon: 'none'
       })
     } finally {
@@ -109,9 +125,8 @@ const IndexPage = () => {
 
       if (res.data.code === 200) {
         // H5端：创建下载链接
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        if (Taro.getEnv() === 'h5') {
+        const isH5 = Taro.getEnv() === 'WEB'
+        if (isH5) {
           const base64Data = res.data.data.fileData
           const link = document.createElement('a')
           link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64Data}`
@@ -122,7 +137,6 @@ const IndexPage = () => {
             icon: 'success'
           })
         } else {
-          // 小程序端：提示需要在H5端下载
           Taro.showToast({
             title: '请在H5端下载文档',
             icon: 'none'
@@ -141,36 +155,6 @@ const IndexPage = () => {
         icon: 'none'
       })
     }
-  }
-
-  // 开始编辑单元格
-  const handleCellClick = (date: string, department: string) => {
-    const currentValue = scheduleData?.schedule[date]?.[department] || ''
-    setEditingCell({ date, department })
-    setEditingValue(currentValue)
-  }
-
-  // 保存编辑
-  const handleSaveEdit = () => {
-    if (!editingCell || !scheduleData) return
-
-    setScheduleData({
-      ...scheduleData,
-      schedule: {
-        ...scheduleData.schedule,
-        [editingCell.date]: {
-          ...scheduleData.schedule[editingCell.date],
-          [editingCell.department]: editingValue
-        }
-      }
-    })
-
-    setEditingCell(null)
-    setEditingValue('')
-    Taro.showToast({
-      title: '修改成功',
-      icon: 'success'
-    })
   }
 
   // 添加医生（从固定列表中添加）
@@ -202,11 +186,9 @@ const IndexPage = () => {
   // 移除医生
   const handleRemoveDoctor = (doctor: string) => {
     setSelectedDoctors(selectedDoctors.filter(d => d !== doctor))
-    // 如果移除的是值班起始医生，重新设置
     if (dutyStartDoctor === doctor) {
       setDutyStartDoctor(selectedDoctors[0] || '')
     }
-    // 如果移除的是请假医生，从请假列表中移除
     setLeaveDoctors(leaveDoctors.filter(d => d !== doctor))
   }
 
@@ -246,14 +228,12 @@ const IndexPage = () => {
         if (res.tapIndex !== undefined) {
           const doctor = selectedDoctors[res.tapIndex]
           if (leaveDoctors.includes(doctor)) {
-            // 取消请假
             setLeaveDoctors(leaveDoctors.filter(d => d !== doctor))
             Taro.showToast({
               title: `已取消${doctor}的请假`,
               icon: 'none'
             })
           } else {
-            // 添加请假
             setLeaveDoctors([...leaveDoctors, doctor])
             Taro.showToast({
               title: `${doctor}已请假`,
@@ -263,29 +243,6 @@ const IndexPage = () => {
         }
       }
     })
-  }
-
-  // 获取医生列表（从排班数据中提取）
-  const getDoctorsList = (): string[] => {
-    if (!scheduleData) return []
-
-    const doctorsSet = new Set<string>()
-    Object.values(scheduleData.schedule).forEach(daySchedule => {
-      Object.values(daySchedule).forEach(doctor => {
-        if (doctor && doctor !== '休息') {
-          doctorsSet.add(doctor)
-        }
-      })
-    })
-
-    // 添加值班医生
-    Object.values(scheduleData.dutySchedule).forEach(doctor => {
-      if (doctor) {
-        doctorsSet.add(doctor)
-      }
-    })
-
-    return Array.from(doctorsSet)
   }
 
   return (
@@ -303,7 +260,7 @@ const IndexPage = () => {
                 value={startDate}
                 onChange={(e) => setStartDate(e.detail.value)}
               >
-                <Text className="text-sm">{startDate || '请选择日期'}</Text>
+                <Text className="block text-sm">{startDate || '请选择日期'}</Text>
               </Picker>
             </View>
           </View>
@@ -311,16 +268,22 @@ const IndexPage = () => {
           {/* 值班起始医生 */}
           <View className="flex flex-row items-center gap-2">
             <Text className="block text-sm font-medium w-24">值班起始：</Text>
-            <View className="flex-1 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200" onClick={handleSelectDutyStartDoctor}>
-              <Text className="text-sm text-blue-600">{dutyStartDoctor || '请选择'}</Text>
+            <View 
+              className="flex-1 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200" 
+              onClick={handleSelectDutyStartDoctor}
+            >
+              <Text className="block text-sm text-blue-600">{dutyStartDoctor || '请选择'}</Text>
             </View>
           </View>
 
           {/* 请假医生 */}
           <View className="flex flex-row items-center gap-2">
             <Text className="block text-sm font-medium w-24">请假医生：</Text>
-            <View className="flex-1 bg-red-50 rounded-lg px-3 py-2 border border-red-200" onClick={handleSelectLeaveDoctors}>
-              <Text className="text-sm text-red-600">
+            <View 
+              className="flex-1 bg-red-50 rounded-lg px-3 py-2 border border-red-200" 
+              onClick={handleSelectLeaveDoctors}
+            >
+              <Text className="block text-sm text-red-600">
                 {leaveDoctors.length > 0 ? leaveDoctors.join('、') : '点击选择（可多选）'}
               </Text>
             </View>
@@ -395,7 +358,7 @@ const IndexPage = () => {
 
       {scheduleData && (
         <View className="p-4">
-          {/* 第一份表格：科室排班表 */}
+          {/* 科室排班表 */}
           <Text className="block text-lg font-bold mb-3">科室排班表</Text>
 
           {/* 值班表 */}
@@ -417,7 +380,7 @@ const IndexPage = () => {
 
           {/* 白班排班表 */}
           <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
-            <Text className="block text-base font-bold mb-3">白班排班</Text>
+            <Text className="block text-base font-bold mb-3">白班排班（含上午/下午）</Text>
             <ScrollView scrollX className="w-full overflow-x-auto">
               <View className="min-w-max">
                 {/* 表头 */}
@@ -426,7 +389,7 @@ const IndexPage = () => {
                     <Text className="block text-sm font-bold text-center">科室</Text>
                   </View>
                   {scheduleData.dates.map((date, index) => (
-                    <View key={date} className="w-24 bg-blue-50 p-2 border border-gray-200">
+                    <View key={date} className="w-32 bg-blue-50 p-2 border border-gray-200">
                       <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index]}</Text>
                     </View>
                   ))}
@@ -439,31 +402,17 @@ const IndexPage = () => {
                       <Text className="block text-sm font-medium text-center">{department}</Text>
                     </View>
                     {scheduleData.dates.map((date) => {
-                      const isEditing = editingCell?.date === date && editingCell?.department === department
-                      const cellValue = scheduleData.schedule[date]?.[department] || ''
+                      const slots = scheduleData.schedule[date]?.[department] || []
+                      const slotText = slots.map(s => {
+                        const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
+                        return `${s.doctor}${suffix}`
+                      }).join('\n')
 
                       return (
-                        <View
-                          key={date}
-                          className="w-24 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center"
-                          onClick={() => handleCellClick(date, department)}
-                        >
-                          {isEditing ? (
-                            <View className="w-full h-8 border border-blue-500 rounded flex items-center justify-center">
-                              <Input
-                                className="w-full text-center text-xs bg-transparent"
-                                style={{ height: '32px' }}
-                                value={editingValue}
-                                onInput={(e) => setEditingValue(e.detail.value)}
-                                onBlur={handleSaveEdit}
-                                onConfirm={handleSaveEdit}
-                              />
-                            </View>
-                          ) : (
-                            <Text className={`text-xs ${cellValue ? 'text-gray-800' : 'text-gray-400'}`}>
-                              {cellValue || '休息'}
-                            </Text>
-                          )}
+                        <View key={date} className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
+                          <Text className={`text-xs text-center whitespace-pre-line ${slotText ? 'text-gray-800' : 'text-gray-400'}`}>
+                            {slotText || '休息'}
+                          </Text>
                         </View>
                       )
                     })}
@@ -473,8 +422,8 @@ const IndexPage = () => {
             </ScrollView>
           </View>
 
-          {/* 第二份表格：医生排班表 */}
-          <Text className="block text-lg font-bold mb-3">医生排班表</Text>
+          {/* 医生排班统计 */}
+          <Text className="block text-lg font-bold mb-3">医生排班统计</Text>
           <View className="bg-white rounded-lg p-4 shadow-sm">
             <ScrollView scrollX className="w-full overflow-x-auto">
               <View className="min-w-max">
@@ -483,44 +432,40 @@ const IndexPage = () => {
                   <View className="w-24 bg-green-50 p-2 border border-gray-200">
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
-                  {scheduleData.dates.map((date, index) => (
-                    <View key={date} className="w-24 bg-green-50 p-2 border border-gray-200">
-                      <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index]}</Text>
-                    </View>
-                  ))}
+                  <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <Text className="block text-xs font-bold text-center">夜班</Text>
+                  </View>
+                  <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <Text className="block text-xs font-bold text-center">上午班</Text>
+                  </View>
+                  <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <Text className="block text-xs font-bold text-center">下午班</Text>
+                  </View>
+                  <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <Text className="block text-xs font-bold text-center">休息天数</Text>
+                  </View>
                 </View>
 
                 {/* 表格内容 */}
-                {getDoctorsList().map((doctor) => (
-                  <View key={doctor} className="flex flex-row">
+                {Object.values(scheduleData.doctorSchedule).map((info) => (
+                  <View key={info.name} className="flex flex-row">
                     <View className="w-24 bg-gray-50 p-2 border border-gray-200">
-                      <Text className="block text-sm font-medium text-center">{doctor}</Text>
+                      <Text className="block text-sm font-medium text-center">{info.name}</Text>
                     </View>
-                    {scheduleData.dates.map((date) => {
-                      // 查找该医生当天的科室
-                      const department = Object.entries(scheduleData.schedule[date] || {})
-                        .find(([_, doc]) => doc === doctor)?.[0] || null
-
-                      // 检查是否是值班
-                      const isDuty = scheduleData.dutySchedule[date] === doctor
-
-                      let cellText = '休息'
-                      let cellClass = 'text-gray-400'
-
-                      if (isDuty) {
-                        cellText = '值班'
-                        cellClass = 'text-blue-600 font-semibold'
-                      } else if (department) {
-                        cellText = department
-                        cellClass = 'text-gray-800'
-                      }
-
-                      return (
-                        <View key={date} className="w-24 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
-                          <Text className={`text-xs ${cellClass}`}>{cellText}</Text>
-                        </View>
-                      )
-                    })}
+                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <Text className="block text-xs">{info.nightShifts}</Text>
+                    </View>
+                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <Text className="block text-xs">{info.morningShifts.length}</Text>
+                    </View>
+                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <Text className="block text-xs">{info.afternoonShifts.length}</Text>
+                    </View>
+                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
+                        {info.restDays}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -529,7 +474,7 @@ const IndexPage = () => {
 
           <View className="mt-4 text-center">
             <Text className="block text-xs text-gray-500">
-              点击科室排班表的单元格可修改医生，确认无误后点击&quot;下载文档&quot;导出Word格式
+              点击排班表单元格可查看详情，确认无误后点击&ldquo;下载文档&rdquo;导出Word格式
             </Text>
           </View>
         </View>
