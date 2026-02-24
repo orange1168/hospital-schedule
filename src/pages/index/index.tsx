@@ -260,7 +260,7 @@ const IndexPage = () => {
             <Text className="block text-sm font-medium w-24">值班起始：</Text>
             <View 
               className="flex-1 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200" 
-              onClick={handleSelectDutyStartDoctor}
+              onTap={handleSelectDutyStartDoctor}
             >
               <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
             </View>
@@ -272,7 +272,7 @@ const IndexPage = () => {
               <Text className="block text-sm font-medium">选择排班医生：</Text>
               <Button
                 className="px-4 py-2 bg-green-500 text-white rounded-lg text-xs"
-                onClick={() => setShowCustomInput(!showCustomInput)}
+                onTap={() => setShowCustomInput(!showCustomInput)}
               >
                 + 自定义医生
               </Button>
@@ -321,7 +321,7 @@ const IndexPage = () => {
                           ? 'bg-blue-100 text-blue-700 border border-blue-300'
                           : 'bg-white text-gray-600 border border-gray-300'
                       }`}
-                      onClick={() => handleToggleDoctor(doctor)}
+                      onTap={() => handleToggleDoctor(doctor)}
                     >
                       <Text className="block text-xs">{doctor}</Text>
                     </View>
@@ -345,7 +345,7 @@ const IndexPage = () => {
                             ? 'bg-green-100 text-green-700 border border-green-300'
                             : 'bg-white text-gray-600 border border-gray-300'
                         }`}
-                        onClick={() => handleToggleDoctor(doctor)}
+                        onTap={() => handleToggleDoctor(doctor)}
                       >
                         <Text className="block text-xs">{doctor}</Text>
                       </View>
@@ -375,7 +375,7 @@ const IndexPage = () => {
                       <Text className="block text-xs">{doctor}</Text>
                       <View
                         className="ml-1 w-4 h-4 rounded-full bg-white flex items-center justify-center"
-                        onClick={(e) => {
+                        onTap={(e) => {
                           e.stopPropagation()
                           handleRemoveDoctor(doctor)
                         }}
