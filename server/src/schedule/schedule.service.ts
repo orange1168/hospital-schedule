@@ -1,10 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun } from 'docx'
 
-// 固定的医生列表（16人）
+// 固定的医生列表（14人）
 const FIXED_DOCTORS = [
   '李茜', '姜维', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎', '杨波',
-  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇', '张三', '李四'
+  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
 ]
 
 // 班次类型
@@ -359,8 +359,6 @@ export class ScheduleService {
       const doctorsWorking = availableDoctors.filter(d => 
         !doctorsOff.includes(d) && 
         !isDoctorOnLeave(d, date) &&
-        doctorSchedule[d].shifts[date] !== 'night' &&
-        doctorSchedule[d].shifts[date] !== 'off' && // 🔴 排除已经标记为休息的医生
         !isDoctorOffByAi(d, date) // 🔴 排除AI约束指定休息的医生
       )
 
@@ -398,7 +396,7 @@ export class ScheduleService {
           // 如果没有AI约束，则选择工作天数最少的医生
           if (!bestDoctor) {
             for (const doctor of doctorsWorking) {
-              // 检查这个医生今天是否已经排班
+              // 检查这个医生今天是否已经排班（包括夜班和白班）
               if (!doctorSchedule[doctor].shifts[date] || doctorSchedule[doctor].shifts[date] === 'off') {
                 if (doctorWorkDays[doctor] < minWorkDays) {
                   minWorkDays = doctorWorkDays[doctor]
@@ -422,7 +420,12 @@ export class ScheduleService {
               department: dept
             })
 
-            doctorSchedule[bestDoctor].shifts[date] = 'morning'
+            // 🔴 CRITICAL: 只有当医生当天没有夜班时，才设置为 morning
+            // 如果医生当天有夜班，保留 night 标记
+            if (!doctorSchedule[bestDoctor].shifts[date]) {
+              doctorSchedule[bestDoctor].shifts[date] = 'morning'
+            }
+            
             doctorSchedule[bestDoctor].departmentsByDate[date] = dept // 记录科室
             doctorSchedule[bestDoctor].morningShifts.push(dept)
             doctorSchedule[bestDoctor].afternoonShifts.push(dept)
@@ -486,12 +489,15 @@ export class ScheduleService {
       const constraint = aiConstraints.doctorConstraints[info.name]
       const mustWorkEveryDay = constraint && constraint.departments && constraint.departments.length > 0
       
-      let restDays = 0
-      dates.forEach(date => {
-        if (info.shifts[date] === 'off') {
-          restDays++
-        }
-      })
+      // 计算工作天数（包括白班和夜班）
+      const workDays = dates.filter(date => 
+        info.shifts[date] && info.shifts[date] !== 'off'
+      ).length
+      
+      // 休息天数 = 总天数 - 工作天数
+      const restDays = dates.length - workDays
+      
+      console.log(`${info.name}: 工作天数=${workDays}, 休息天数=${restDays}, shifts=${JSON.stringify(info.shifts)}`)
 
       // 如果AI约束要求每天都工作，则跳过休息验证
       if (!mustWorkEveryDay && restDays < 1) {
@@ -510,13 +516,13 @@ export class ScheduleService {
     dates: string[]
   ): void {
     Object.values(doctorSchedule).forEach(info => {
-      let restDays = 0
-      dates.forEach(date => {
-        if (info.shifts[date] === 'off') {
-          restDays++
-        }
-      })
-      info.restDays = restDays
+      // 计算工作天数（包括白班和夜班）
+      const workDays = dates.filter(date => 
+        info.shifts[date] && info.shifts[date] !== 'off'
+      ).length
+      
+      // 休息天数 = 总天数 - 工作天数
+      info.restDays = dates.length - workDays
     })
   }
 
