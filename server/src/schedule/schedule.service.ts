@@ -1,6 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun } from 'docx'
 
+// 固定的医生列表（14人）
+const FIXED_DOCTORS = [
+  '李茜', '姜维', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎', '杨波',
+  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
+]
+
 // 班次类型
 export type ShiftType = 'morning' | 'afternoon' | 'night' | 'off'
 
@@ -17,6 +23,8 @@ export interface DoctorSchedule {
   shifts: Record<string, ShiftType> // key: date, value: shift type
   morningShifts: string[] // 上午班次的科室列表
   afternoonShifts: string[] // 下午班次的科室列表
+  morningShiftDays: number // 上午班天数
+  afternoonShiftDays: number // 下午班天数
   nightShifts: number // 夜班次数
   restDays: number // 休息天数
 }
@@ -92,6 +100,8 @@ export class ScheduleService {
         shifts: {},
         morningShifts: [],
         afternoonShifts: [],
+        morningShiftDays: 0,
+        afternoonShiftDays: 0,
         nightShifts: 0,
         restDays: 0
       }
@@ -155,10 +165,10 @@ export class ScheduleService {
     doctorSchedule: Record<string, DoctorSchedule>,
     leaveList: string[]
   ): void {
-    // 找到值班起始医生的索引
+    // 找到值班起始医生在 FIXED_DOCTORS 中的索引
     let startIndex = 0
-    if (dutyStartDoctor && availableDoctors.includes(dutyStartDoctor)) {
-      startIndex = availableDoctors.indexOf(dutyStartDoctor)
+    if (dutyStartDoctor && FIXED_DOCTORS.includes(dutyStartDoctor)) {
+      startIndex = FIXED_DOCTORS.indexOf(dutyStartDoctor)
     }
 
     let doctorIndex = startIndex
@@ -168,17 +178,40 @@ export class ScheduleService {
       let attempts = 0
       let selectedDoctor = ''
       
-      while (attempts < availableDoctors.length * 2) {
-        const doctor = availableDoctors[doctorIndex % availableDoctors.length]
+      while (attempts < FIXED_DOCTORS.length * 2) {
+        const doctor = FIXED_DOCTORS[doctorIndex % FIXED_DOCTORS.length]
         
-        // 检查是否请假或第二天需要休息
-        if (!leaveList.includes(doctor) && !nextDayOff.has(doctor)) {
+        // 检查医生是否在可用医生列表中，并且没有请假或第二天需要休息
+        if (
+          availableDoctors.includes(doctor) &&
+          !leaveList.includes(doctor) &&
+          !nextDayOff.has(doctor)
+        ) {
           selectedDoctor = doctor
           break
         }
         
         doctorIndex++
         attempts++
+      }
+
+      // 如果在 FIXED_DOCTORS 中找不到，则在 availableDoctors 中找
+      if (!selectedDoctor && availableDoctors.length > 0) {
+        let availableIndex = 0
+        while (attempts < availableDoctors.length * 2) {
+          const doctor = availableDoctors[availableIndex % availableDoctors.length]
+          
+          if (
+            !leaveList.includes(doctor) &&
+            !nextDayOff.has(doctor)
+          ) {
+            selectedDoctor = doctor
+            break
+          }
+          
+          availableIndex++
+          attempts++
+        }
       }
 
       if (!selectedDoctor) {
@@ -218,6 +251,12 @@ export class ScheduleService {
       doctorWorkDays[doctor] = 0
     })
 
+    // 记录每个医生每天是否已经排过班（避免重复统计天数）
+    const doctorDailyWork: Record<string, Set<string>> = {}
+    availableDoctors.forEach(doctor => {
+      doctorDailyWork[doctor] = new Set()
+    })
+
     dates.forEach((date, dateIndex) => {
       const doctorsOff = Array.from(nextDayOff)
       const doctorsWorking = availableDoctors.filter(d => 
@@ -226,7 +265,18 @@ export class ScheduleService {
         doctorSchedule[d].shifts[date] !== 'night'
       )
 
-      this.departments.forEach(dept => {
+      // 判断是否是周末（周六或周日）
+      const dateObj = new Date(date)
+      const dayOfWeek = dateObj.getDay()
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 // 0是周日，6是周六
+
+      // 周末只排3-4个科室，工作日排所有科室
+      let departmentsForDay = this.departments
+      if (isWeekend) {
+        departmentsForDay = this.departments.slice(0, 4) // 只排前4个科室
+      }
+
+      departmentsForDay.forEach(dept => {
         if (doctorsWorking.length > 0) {
           // 选择工作天数最少的医生
           let bestDoctor = doctorsWorking[0]
@@ -254,12 +304,38 @@ export class ScheduleService {
           doctorSchedule[bestDoctor].shifts[date] = 'morning'
           doctorSchedule[bestDoctor].morningShifts.push(dept)
           doctorSchedule[bestDoctor].afternoonShifts.push(dept)
-          doctorWorkDays[bestDoctor]++
+          
+          // 统计天数：如果这个医生今天还没排过班，则天数+1
+          if (!doctorDailyWork[bestDoctor].has(date)) {
+            doctorDailyWork[bestDoctor].add(date)
+            doctorWorkDays[bestDoctor]++
+          }
         }
       })
 
       // 清除第二天的休息标记
       nextDayOff.clear()
+    })
+
+    // 计算上午班和下午班的天数
+    Object.values(doctorSchedule).forEach(info => {
+      // 统计上午班天数
+      const morningDays = new Set<string>()
+      dates.forEach(date => {
+        if (info.shifts[date] === 'morning') {
+          morningDays.add(date)
+        }
+      })
+      info.morningShiftDays = morningDays.size
+
+      // 统计下午班天数（下午班和上午班同一天）
+      const afternoonDays = new Set<string>()
+      dates.forEach(date => {
+        if (info.shifts[date] === 'morning') {
+          afternoonDays.add(date)
+        }
+      })
+      info.afternoonShiftDays = afternoonDays.size
     })
 
     console.log('日班分配完成，各医生工作天数:', doctorWorkDays)

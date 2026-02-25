@@ -34,6 +34,7 @@ const IndexPage = () => {
   const [selectedDoctors, setSelectedDoctors] = useState<string[]>([])
   const [customDoctors, setCustomDoctors] = useState<string[]>([])
   const [dutyStartDoctor, setDutyStartDoctor] = useState<string>('')
+  const [showDutyStartPicker, setShowDutyStartPicker] = useState(false)
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customDoctorName, setCustomDoctorName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -225,14 +226,16 @@ const IndexPage = () => {
       return
     }
 
-    Taro.showActionSheet({
-      itemList: selectedDoctors,
-      success: (res) => {
-        if (res.tapIndex !== undefined) {
-          setDutyStartDoctor(selectedDoctors[res.tapIndex])
-        }
-      }
-    })
+    setShowDutyStartPicker(true)
+  }
+
+  // 选择值班起始医生的确认
+  const handleConfirmDutyStartDoctor = (e) => {
+    const index = e.detail.value
+    if (index !== undefined && index >= 0) {
+      setDutyStartDoctor(selectedDoctors[index])
+    }
+    setShowDutyStartPicker(false)
   }
 
   return (
@@ -268,6 +271,19 @@ const IndexPage = () => {
               <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
             </View>
           </View>
+
+          {/* 值班起始医生选择器 */}
+          {showDutyStartPicker && (
+            <Picker
+              mode="selector"
+              range={selectedDoctors}
+              value={selectedDoctors.indexOf(dutyStartDoctor)}
+              onChange={handleConfirmDutyStartDoctor}
+              onCancel={() => setShowDutyStartPicker(false)}
+            >
+              <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'transparent', zIndex: 9999 }}></View>
+            </Picker>
+          )}
 
           {/* 可选医生区域 */}
           <View className="flex flex-col gap-2">
@@ -494,6 +510,63 @@ const IndexPage = () => {
             </ScrollView>
           </View>
 
+          {/* 医生排班表 */}
+          <Text className="block text-lg font-bold mb-3 mt-6">医生排班表</Text>
+          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
+            <ScrollView scrollX className="w-full overflow-x-auto">
+              <View className="min-w-max">
+                {/* 表头 */}
+                <View className="flex flex-row">
+                  <View className="w-24 bg-purple-50 p-2 border border-gray-200">
+                    <Text className="block text-sm font-bold text-center">医生</Text>
+                  </View>
+                  {scheduleData.dates.map((date, index) => (
+                    <View key={date} className="w-20 bg-purple-50 p-2 border border-gray-200">
+                      <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
+                      <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* 表格内容 */}
+                {selectedDoctors.map((doctor) => {
+                  const schedule = scheduleData.doctorSchedule[doctor]
+                  return (
+                    <View key={doctor} className="flex flex-row">
+                      <View className="w-24 bg-gray-50 p-2 border border-gray-200">
+                        <Text className="block text-sm font-medium text-center">{doctor}</Text>
+                      </View>
+                      {scheduleData.dates.map((date) => {
+                        const shift = schedule?.shifts[date]
+                        let shiftText = ''
+                        let shiftColor = 'text-gray-400'
+                        
+                        if (shift === 'night') {
+                          shiftText = '夜班'
+                          shiftColor = 'text-red-600'
+                        } else if (shift === 'morning') {
+                          shiftText = '白班'
+                          shiftColor = 'text-blue-600'
+                        } else {
+                          shiftText = '休息'
+                          shiftColor = 'text-gray-400'
+                        }
+
+                        return (
+                          <View key={date} className="w-20 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                            <Text className={`text-xs text-center ${shiftColor}`}>
+                              {shiftText}
+                            </Text>
+                          </View>
+                        )
+                      })}
+                    </View>
+                  )
+                })}
+              </View>
+            </ScrollView>
+          </View>
+
           {/* 医生排班统计 */}
           <Text className="block text-lg font-bold mb-3">医生排班统计</Text>
           <View className="bg-white rounded-lg p-4 shadow-sm">
@@ -508,10 +581,10 @@ const IndexPage = () => {
                     <Text className="block text-xs font-bold text-center">夜班</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
-                    <Text className="block text-xs font-bold text-center">上午班</Text>
+                    <Text className="block text-xs font-bold text-center">上午班(天)</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
-                    <Text className="block text-xs font-bold text-center">下午班</Text>
+                    <Text className="block text-xs font-bold text-center">下午班(天)</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
                     <Text className="block text-xs font-bold text-center">休息天数</Text>
@@ -528,10 +601,10 @@ const IndexPage = () => {
                       <Text className="block text-xs">{info.nightShifts}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{info.morningShifts.length}</Text>
+                      <Text className="block text-xs">{(info as any).morningShiftDays || info.morningShifts.length}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{info.afternoonShifts.length}</Text>
+                      <Text className="block text-xs">{(info as any).afternoonShiftDays || info.afternoonShifts.length}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
                       <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
