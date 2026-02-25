@@ -236,8 +236,8 @@ const IndexPage = () => {
   }
 
   return (
-    <View className="min-h-screen bg-gray-50">
-      <View className="bg-white p-4 sticky top-0 z-10 shadow-sm">
+    <ScrollView scrollY className="h-screen bg-gray-50">
+      <View className="bg-white p-4 mb-4 shadow-sm">
         <Text className="block text-xl font-bold text-center mb-4">医院排班系统</Text>
 
         <View className="flex flex-col gap-3">
@@ -259,8 +259,11 @@ const IndexPage = () => {
           <View className="flex flex-row items-center gap-2">
             <Text className="block text-sm font-medium w-24">值班起始：</Text>
             <View 
-              className="flex-1 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200" 
-              onTap={handleSelectDutyStartDoctor}
+              className="flex-1 bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200 active:bg-blue-100" 
+              onTap={(e) => {
+                e.stopPropagation()
+                handleSelectDutyStartDoctor()
+              }}
             >
               <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
             </View>
@@ -291,13 +294,13 @@ const IndexPage = () => {
                 </View>
                 <Button
                   className="px-4 py-2 bg-green-500 text-white rounded-lg text-xs"
-                  onClick={handleAddCustomDoctor}
+                  onTap={handleAddCustomDoctor}
                 >
                   添加
                 </Button>
                 <Button
                   className="px-4 py-2 bg-gray-500 text-white rounded-lg text-xs"
-                  onClick={() => {
+                  onTap={() => {
                     setShowCustomInput(false)
                     setCustomDoctorName('')
                   }}
@@ -400,7 +403,7 @@ const IndexPage = () => {
             </Button>
             <Button
               className="flex-1 bg-green-500 text-white rounded-lg py-3"
-              onClick={handleDownloadDoc}
+              onTap={handleDownloadDoc}
               disabled={!scheduleData}
             >
               下载文档
@@ -456,15 +459,31 @@ const IndexPage = () => {
                     </View>
                     {scheduleData.dates.map((date) => {
                       const slots = scheduleData.schedule[date]?.[department] || []
-                      const slotText = slots.map(s => {
-                        const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
-                        return `${s.doctor}${suffix}`
-                      }).join('\n')
+                      
+                      // 优化显示：如果上下午是同一个医生，只显示一次名字
+                      let slotText = ''
+                      if (slots.length === 0) {
+                        slotText = '休息'
+                      } else if (slots.length === 1) {
+                        const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
+                        slotText = `${slots[0].doctor}${suffix}`
+                      } else if (slots.length === 2) {
+                        // 如果两个班次的医生相同，只显示一次
+                        if (slots[0].doctor === slots[1].doctor) {
+                          slotText = slots[0].doctor
+                        } else {
+                          // 否则分别显示
+                          slotText = slots.map(s => {
+                            const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
+                            return `${s.doctor}${suffix}`
+                          }).join('\n')
+                        }
+                      }
 
                       return (
                         <View key={date} className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
-                          <Text className={`text-xs text-center whitespace-pre-line ${slotText ? 'text-gray-800' : 'text-gray-400'}`}>
-                            {slotText || '休息'}
+                          <Text className={`text-xs text-center whitespace-pre-line ${slotText && slotText !== '休息' ? 'text-gray-800' : 'text-gray-400'}`}>
+                            {slotText}
                           </Text>
                         </View>
                       )
@@ -525,14 +544,14 @@ const IndexPage = () => {
             </ScrollView>
           </View>
 
-          <View className="mt-4 text-center">
+          <View className="mt-4 mb-20 text-center">
             <Text className="block text-xs text-gray-500">
               点击排班表单元格可查看详情，确认无误后点击&ldquo;下载文档&rdquo;导出Word格式
             </Text>
           </View>
         </View>
       )}
-    </View>
+    </ScrollView>
   )
 }
 
