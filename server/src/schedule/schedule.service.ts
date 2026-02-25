@@ -21,6 +21,7 @@ export interface ScheduleSlot {
 export interface DoctorSchedule {
   name: string
   shifts: Record<string, ShiftType> // key: date, value: shift type
+  departmentsByDate: Record<string, string> // key: date, value: department name
   morningShifts: string[] // 上午班次的科室列表
   afternoonShifts: string[] // 下午班次的科室列表
   morningShiftDays: number // 上午班天数
@@ -129,6 +130,7 @@ export class ScheduleService {
       doctorSchedule[doctor] = {
         name: doctor,
         shifts: {},
+        departmentsByDate: {},
         morningShifts: [],
         afternoonShifts: [],
         morningShiftDays: 0,
@@ -261,6 +263,7 @@ export class ScheduleService {
 
       dutySchedule[date] = selectedDoctor
       doctorSchedule[selectedDoctor].shifts[date] = 'night'
+      doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
       // 标记第二天需要休息
@@ -318,37 +321,44 @@ export class ScheduleService {
 
       departmentsForDay.forEach(dept => {
         if (doctorsWorking.length > 0) {
-          // 选择工作天数最少的医生
-          let bestDoctor = doctorsWorking[0]
-          let minWorkDays = doctorWorkDays[bestDoctor]
+          // 从今天还未排班的医生中，选择工作天数最少的医生
+          let bestDoctor = ''
+          let minWorkDays = Infinity
 
           doctorsWorking.forEach(doctor => {
-            if (doctorWorkDays[doctor] < minWorkDays) {
-              minWorkDays = doctorWorkDays[doctor]
-              bestDoctor = doctor
+            // 检查这个医生今天是否已经排班
+            if (!doctorSchedule[doctor].shifts[date] || doctorSchedule[doctor].shifts[date] === 'off') {
+              if (doctorWorkDays[doctor] < minWorkDays) {
+                minWorkDays = doctorWorkDays[doctor]
+                bestDoctor = doctor
+              }
             }
           })
 
-          schedule[date][dept].push({
-            doctor: bestDoctor,
-            shift: 'morning',
-            department: dept
-          })
-          
-          schedule[date][dept].push({
-            doctor: bestDoctor,
-            shift: 'afternoon',
-            department: dept
-          })
+          // 如果找到合适的医生，则分配
+          if (bestDoctor) {
+            schedule[date][dept].push({
+              doctor: bestDoctor,
+              shift: 'morning',
+              department: dept
+            })
+            
+            schedule[date][dept].push({
+              doctor: bestDoctor,
+              shift: 'afternoon',
+              department: dept
+            })
 
-          doctorSchedule[bestDoctor].shifts[date] = 'morning'
-          doctorSchedule[bestDoctor].morningShifts.push(dept)
-          doctorSchedule[bestDoctor].afternoonShifts.push(dept)
-          
-          // 统计天数：如果这个医生今天还没排过班，则天数+1
-          if (!doctorDailyWork[bestDoctor].has(date)) {
-            doctorDailyWork[bestDoctor].add(date)
-            doctorWorkDays[bestDoctor]++
+            doctorSchedule[bestDoctor].shifts[date] = 'morning'
+            doctorSchedule[bestDoctor].departmentsByDate[date] = dept // 记录科室
+            doctorSchedule[bestDoctor].morningShifts.push(dept)
+            doctorSchedule[bestDoctor].afternoonShifts.push(dept)
+            
+            // 统计天数：如果这个医生今天还没排过班，则天数+1
+            if (!doctorDailyWork[bestDoctor].has(date)) {
+              doctorDailyWork[bestDoctor].add(date)
+              doctorWorkDays[bestDoctor]++
+            }
           }
         }
       })
@@ -628,12 +638,13 @@ export class ScheduleService {
                 ...dates.map(
                   (date) => {
                     const shift = info.shifts[date]
+                    const department = info.departmentsByDate[date]
                     let shiftText = '-'
                     
                     if (shift === 'night') {
-                      shiftText = '夜班'
+                      shiftText = `${department || '值班'} 夜班`
                     } else if (shift === 'morning') {
-                      shiftText = '白班'
+                      shiftText = department || '休息'
                     }
 
                     return new TableCell({

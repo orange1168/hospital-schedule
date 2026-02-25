@@ -38,6 +38,12 @@ const IndexPage = () => {
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customDoctorName, setCustomDoctorName] = useState('')
   const [loading, setLoading] = useState(false)
+  
+  // 请假相关状态
+  const [showLeaveSelector, setShowLeaveSelector] = useState(false)
+  const [leaveDoctor, setLeaveDoctor] = useState('')
+  const [leaveDates, setLeaveDates] = useState<string[]>([])
+  const [showLeaveDatePickers, setShowLeaveDatePickers] = useState<Record<number, boolean>>({})
 
   // 生成排班
   const handleGenerateSchedule = async () => {
@@ -68,7 +74,7 @@ const IndexPage = () => {
     setLoading(true)
 
     try {
-      console.log('开始生成排班，参数:', { startDate, doctors: selectedDoctors, dutyStartDoctor })
+      console.log('开始生成排班，参数:', { startDate, doctors: selectedDoctors, dutyStartDoctor, leaveDoctor, leaveDates })
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
@@ -76,7 +82,7 @@ const IndexPage = () => {
           startDate,
           doctors: selectedDoctors,
           dutyStartDoctor,
-          leaveDoctors: []
+          leaveDoctors: leaveDoctor && leaveDates.length > 0 ? [{ doctor: leaveDoctor, dates: leaveDates }] : []
         }
       })
       console.log('排班生成响应:', res.data)
@@ -408,6 +414,97 @@ const IndexPage = () => {
             )}
           </View>
 
+          {/* 请假设置 */}
+          <View className="mt-4 bg-yellow-50 rounded-lg p-3">
+            <View className="flex flex-row items-center justify-between mb-2">
+              <Text className="block text-sm font-medium">请假设置：</Text>
+              <Button
+                className="px-3 py-1 bg-yellow-500 text-white rounded text-xs"
+                onTap={() => setShowLeaveSelector(!showLeaveSelector)}
+              >
+                {showLeaveSelector ? '隐藏' : '显示'}
+              </Button>
+            </View>
+            
+            {showLeaveSelector && (
+              <View className="flex flex-col gap-2">
+                {/* 选择请假医生 */}
+                <View className="flex flex-row items-center gap-2">
+                  <Text className="block text-xs w-16">请假医生：</Text>
+                  <View className="flex-1 bg-white rounded px-3 py-2">
+                    <Picker
+                      mode="selector"
+                      range={['无', ...selectedDoctors]}
+                      value={selectedDoctors.indexOf(leaveDoctor) + 1}
+                      onChange={(e) => {
+                        const index = e.detail.value
+                        if (index === 0) {
+                          setLeaveDoctor('')
+                        } else {
+                          setLeaveDoctor(selectedDoctors[index - 1])
+                        }
+                      }}
+                    >
+                      <Text className="block text-xs">{leaveDoctor || '请选择'}</Text>
+                    </Picker>
+                  </View>
+                </View>
+
+                {/* 请假日期 */}
+                <View className="flex flex-col gap-2">
+                  <Text className="block text-xs">请假日期：</Text>
+                  {leaveDates.map((date, index) => (
+                    <View key={index} className="flex flex-row gap-2 items-center">
+                      <View className="flex-1 bg-white rounded px-3 py-2">
+                        <Picker
+                          mode="date"
+                          value={date}
+                          onChange={(e) => {
+                            const newDates = [...leaveDates]
+                            newDates[index] = e.detail.value
+                            setLeaveDates(newDates)
+                          }}
+                        >
+                          <Text className="block text-xs">{date || '请选择日期'}</Text>
+                        </Picker>
+                      </View>
+                      <Button
+                        className="px-3 py-1 bg-red-500 text-white rounded text-xs"
+                        onTap={() => {
+                          const newDates = leaveDates.filter((_, i) => i !== index)
+                          setLeaveDates(newDates)
+                        }}
+                      >
+                        删除
+                      </Button>
+                    </View>
+                  ))}
+                  <Button
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-xs"
+                    onTap={() => {
+                      if (!startDate) {
+                        Taro.showToast({ title: '请先选择开始日期', icon: 'none' })
+                        return
+                      }
+                      setLeaveDates([...leaveDates, startDate])
+                    }}
+                  >
+                    + 添加请假日期
+                  </Button>
+                </View>
+
+                {/* 显示当前请假信息 */}
+                {leaveDoctor && leaveDates.length > 0 && (
+                  <View className="bg-red-50 rounded-lg p-2 mt-2">
+                    <Text className="block text-xs text-red-600">
+                      {leaveDoctor} 将在 {leaveDates.join('、')} 请假
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
           {/* 操作按钮 */}
           <View className="flex flex-row gap-2 mt-2">
             <Button
@@ -521,7 +618,7 @@ const IndexPage = () => {
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
                   {scheduleData.dates.map((date, index) => (
-                    <View key={date} className="w-20 bg-purple-50 p-2 border border-gray-200">
+                    <View key={date} className="w-24 bg-purple-50 p-2 border border-gray-200">
                       <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
                       <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
                     </View>
@@ -538,14 +635,15 @@ const IndexPage = () => {
                       </View>
                       {scheduleData.dates.map((date) => {
                         const shift = schedule?.shifts[date]
+                        const department = (schedule as any)?.departmentsByDate?.[date]
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'
                         
                         if (shift === 'night') {
-                          shiftText = '夜班'
+                          shiftText = `${department || '值班'} 夜班`
                           shiftColor = 'text-red-600'
                         } else if (shift === 'morning') {
-                          shiftText = '白班'
+                          shiftText = department || '休息'
                           shiftColor = 'text-blue-600'
                         } else {
                           shiftText = '休息'
@@ -553,7 +651,7 @@ const IndexPage = () => {
                         }
 
                         return (
-                          <View key={date} className="w-20 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                          <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
                             <Text className={`text-xs text-center ${shiftColor}`}>
                               {shiftText}
                             </Text>
