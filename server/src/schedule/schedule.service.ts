@@ -215,7 +215,7 @@ export class ScheduleService {
     )
 
     // 步骤3：检查每个医生的休息天数（考虑AI约束）
-    const failedDoctors = this.validateRestDays(doctorSchedule, dates, aiConstraints)
+    const failedDoctors = this.validateRestDays(doctorSchedule, dates, aiConstraints, availableDoctors)
     if (failedDoctors.length > 0) {
       throw new BadRequestException(
         `人数不足，以下医生无法获得至少一天的休息：${failedDoctors.join('、')}`
@@ -472,11 +472,16 @@ export class ScheduleService {
   private validateRestDays(
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[],
-    aiConstraints: AiConstraints
+    aiConstraints: AiConstraints,
+    availableDoctors: string[]  // 只验证可用医生的休息天数
   ): string[] {
     const failedDoctors: string[] = []
 
-    Object.values(doctorSchedule).forEach(info => {
+    // 只验证可用医生（不包括请假医生）
+    availableDoctors.forEach(doctorName => {
+      const info = doctorSchedule[doctorName]
+      if (!info) return
+      
       // 检查是否有AI约束要求该医生每天都工作
       const constraint = aiConstraints.doctorConstraints[info.name]
       const mustWorkEveryDay = constraint && constraint.departments && constraint.departments.length > 0
