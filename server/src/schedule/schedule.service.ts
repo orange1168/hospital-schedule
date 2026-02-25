@@ -46,6 +46,11 @@ export interface LeaveInfo {
   dates: string[] // 请假日期列表
 }
 
+// AI约束接口
+interface AiConstraints {
+  doctorConstraints: Record<string, { departments: string[]; days: string[]; offDays: string[] }>
+}
+
 @Injectable()
 export class ScheduleService {
   // 科室列表
@@ -118,6 +123,7 @@ export class ScheduleService {
     if (availableDoctors.length === 0) {
       throw new BadRequestException('没有可用的医生进行排班')
     }
+
     const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
     
     // 初始化排班表结构
@@ -159,6 +165,32 @@ export class ScheduleService {
       return leaveMap[doctor].includes(date)
     }
 
+    // 检查医生是否在AI约束中指定了休息日
+    const isDoctorOffByAi = (doctor: string, date: string): boolean => {
+      const constraint = aiConstraints.doctorConstraints[doctor]
+      if (!constraint || !constraint.offDays) return false
+      
+      // 获取日期的星期
+      const dateObj = new Date(date)
+      const dayOfWeek = dateObj.getDay()
+      const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+      const dayName = dayNames[dayOfWeek]
+      
+      return constraint.offDays.includes(dayName)
+    }
+
+    // 检查医生在AI约束中是否必须排某个科室
+    const getRequiredDepartment = (doctor: string, date: string): string | null => {
+      const constraint = aiConstraints.doctorConstraints[doctor]
+      if (!constraint || !constraint.departments || constraint.departments.length === 0) {
+        return null
+      }
+      
+      // 如果AI要求每天都排某个科室，则返回第一个科室
+      // 实际应用中可以根据日期或其他条件判断
+      return constraint.departments[0]
+    }
+
     // 步骤1：分配夜班
     this.assignNightShifts(
       dates,
@@ -177,7 +209,9 @@ export class ScheduleService {
       nextDayOff,
       availableDoctors,
       doctorSchedule,
-      isDoctorOnLeave
+      isDoctorOnLeave,
+      isDoctorOffByAi,
+      getRequiredDepartment
     )
 
     // 步骤3：检查每个医生的休息天数
@@ -273,15 +307,17 @@ export class ScheduleService {
       doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
-      // 标记第二天需要休息
+      // 🔴 CRITICAL: 标记第二天需要休息
       if (index + 1 < dates.length) {
         nextDayOff.add(selectedDoctor)
+        console.log(`${date} 夜班医生 ${selectedDoctor}，${dates[index + 1]} 强制休息`)
       }
 
       doctorIndex++
     })
 
     console.log('夜班分配完成:', dutySchedule)
+    console.log('nextDayOff:', Array.from(nextDayOff))
   }
 
   /**
@@ -293,7 +329,9 @@ export class ScheduleService {
     nextDayOff: Set<string>,
     availableDoctors: string[],
     doctorSchedule: Record<string, DoctorSchedule>,
-    isDoctorOnLeave: (doctor: string, date: string) => boolean
+    isDoctorOnLeave: (doctor: string, date: string) => boolean,
+    isDoctorOffByAi: (doctor: string, date: string) => boolean,
+    getRequiredDepartment: (doctor: string, date: string) => string | null
   ): void {
     // 记录每个医生的工作天数
     const doctorWorkDays: Record<string, number> = {}
@@ -311,6 +349,7 @@ export class ScheduleService {
       // 🔴 CRITICAL: 在循环开始时，将 nextDayOff 中的医生标记为休息
       nextDayOff.forEach(doctor => {
         doctorSchedule[doctor].shifts[date] = 'off'
+        console.log(`${date} ${doctor} 因前一天夜班而强制休息`)
       })
 
       // 清空 nextDayOff，以便在分配夜班后重新填充
@@ -321,7 +360,8 @@ export class ScheduleService {
         !doctorsOff.includes(d) && 
         !isDoctorOnLeave(d, date) &&
         doctorSchedule[d].shifts[date] !== 'night' &&
-        doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已经标记为休息的医生
+        doctorSchedule[d].shifts[date] !== 'off' && // 🔴 排除已经标记为休息的医生
+        !isDoctorOffByAi(d, date) // 🔴 排除AI约束指定休息的医生
       )
 
       // 判断是否是周末（周六或周日）
@@ -335,21 +375,38 @@ export class ScheduleService {
         departmentsForDay = this.departments.slice(0, 4) // 只排前4个科室
       }
 
+      console.log(`${date} (${isWeekend ? '周末' : '工作日'}) 需要排科室数量: ${departmentsForDay.length}`)
+
       departmentsForDay.forEach(dept => {
         if (doctorsWorking.length > 0) {
-          // 从今天还未排班的医生中，选择工作天数最少的医生
+          // 🔴 优先分配AI约束的医生
           let bestDoctor = ''
           let minWorkDays = Infinity
 
-          doctorsWorking.forEach(doctor => {
-            // 检查这个医生今天是否已经排班
-            if (!doctorSchedule[doctor].shifts[date] || doctorSchedule[doctor].shifts[date] === 'off') {
-              if (doctorWorkDays[doctor] < minWorkDays) {
-                minWorkDays = doctorWorkDays[doctor]
-                bestDoctor = doctor
+          // 首先检查是否有AI约束要求某个医生必须排这个科室
+          for (const doctor of availableDoctors) {
+            const requiredDept = getRequiredDepartment(doctor, date)
+            if (requiredDept === dept && 
+                doctorsWorking.includes(doctor) &&
+                !doctorSchedule[doctor].shifts[date]) {
+              bestDoctor = doctor
+              console.log(`${date} ${dept} AI约束: ${doctor} 必须排此科室`)
+              break
+            }
+          }
+
+          // 如果没有AI约束，则选择工作天数最少的医生
+          if (!bestDoctor) {
+            for (const doctor of doctorsWorking) {
+              // 检查这个医生今天是否已经排班
+              if (!doctorSchedule[doctor].shifts[date] || doctorSchedule[doctor].shifts[date] === 'off') {
+                if (doctorWorkDays[doctor] < minWorkDays) {
+                  minWorkDays = doctorWorkDays[doctor]
+                  bestDoctor = doctor
+                }
               }
             }
-          })
+          }
 
           // 如果找到合适的医生，则分配
           if (bestDoctor) {
@@ -375,6 +432,10 @@ export class ScheduleService {
               doctorDailyWork[bestDoctor].add(date)
               doctorWorkDays[bestDoctor]++
             }
+            
+            console.log(`${date} ${dept} 分配给 ${bestDoctor}`)
+          } else {
+            console.log(`${date} ${dept} 没有找到合适的医生`)
           }
         }
       })
@@ -414,14 +475,16 @@ export class ScheduleService {
   ): string[] {
     const failedDoctors: string[] = []
 
-    Object.values(doctorSchedule).forEach(doctorInfo => {
-      const restDays = dates.filter(date => {
-        const shift = doctorInfo.shifts[date]
-        return shift === 'off' || !shift
-      }).length
+    Object.values(doctorSchedule).forEach(info => {
+      let restDays = 0
+      dates.forEach(date => {
+        if (info.shifts[date] === 'off') {
+          restDays++
+        }
+      })
 
-      if (restDays === 0) {
-        failedDoctors.push(doctorInfo.name)
+      if (restDays < 1) {
+        failedDoctors.push(info.name)
       }
     })
 
@@ -435,23 +498,15 @@ export class ScheduleService {
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[]
   ): void {
-    Object.values(doctorSchedule).forEach(doctorInfo => {
-      const restDays = dates.filter(date => {
-        const shift = doctorInfo.shifts[date]
-        return shift === 'off' || !shift
-      }).length
-      doctorInfo.restDays = restDays
+    Object.values(doctorSchedule).forEach(info => {
+      let restDays = 0
+      dates.forEach(date => {
+        if (info.shifts[date] === 'off') {
+          restDays++
+        }
+      })
+      info.restDays = restDays
     })
-  }
-
-  /**
-   * 获取日期和星期
-   */
-  private getDateWithWeek(date: string): string {
-    const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-    const dateObj = new Date(date)
-    const weekDay = weekDays[dateObj.getDay()]
-    return `${date} ${weekDay}`
   }
 
   /**
@@ -471,11 +526,20 @@ export class ScheduleService {
   }
 
   /**
+   * 获取日期和星期
+   */
+  private getDateWithWeek(date: string): string {
+    const dateObj = new Date(date)
+    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const dayOfWeek = dateObj.getDay()
+
+    return `${date.split('-')[1]}-${date.split('-')[2]} ${dayNames[dayOfWeek]}`
+  }
+
+  /**
    * 生成Word文档
    */
   async generateWordDoc(scheduleData: ScheduleData, startDate: string): Promise<Buffer> {
-    const doctorsList = Object.keys(scheduleData.doctorSchedule)
-
     const doc = new Document({
       sections: [
         {
@@ -484,80 +548,63 @@ export class ScheduleService {
             new Paragraph({
               children: [
                 new TextRun({
-                  text: '医院排班表',
+                  text: `医院排班表 (${startDate} 起一周)`,
                   bold: true,
-                  size: 32,
-                }),
+                  size: 32
+                })
               ],
-              spacing: { after: 200 },
+              alignment: 'center',
+              spacing: { after: 200 }
             }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: `开始日期：${startDate}`,
-                  size: 24,
-                }),
-              ],
-              spacing: { after: 200 },
-            }),
+            // 值班表
             new Paragraph({
               children: [
                 new TextRun({
                   text: '夜间值班',
                   bold: true,
-                  size: 28,
-                }),
+                  size: 24
+                })
               ],
-              spacing: { after: 200 },
+              spacing: { before: 200, after: 100 }
             }),
-            this.createDutyTable(scheduleData),
+            this.createDutyScheduleTable(scheduleData),
+            // 白班排班表
             new Paragraph({
               children: [
                 new TextRun({
-                  text: '白班排班（科室）',
+                  text: '白班排班（含上午/下午）',
                   bold: true,
-                  size: 28,
-                }),
+                  size: 24
+                })
               ],
-              spacing: { before: 400, after: 200 },
+              spacing: { before: 400, after: 100 }
             }),
-            this.createScheduleTable(scheduleData),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: '医生排班',
-                  bold: true,
-                  size: 28,
-                }),
-              ],
-              spacing: { before: 400, after: 200 },
-            }),
-            this.createDoctorScheduleTable(scheduleData),
+            this.createDayScheduleTable(scheduleData),
+            // 医生排班统计
             new Paragraph({
               children: [
                 new TextRun({
                   text: '医生排班统计',
                   bold: true,
-                  size: 28,
-                }),
+                  size: 24
+                })
               ],
-              spacing: { before: 400, after: 200 },
+              spacing: { before: 400, after: 100 }
             }),
-            this.createDoctorStatsTable(scheduleData),
-          ],
-        },
-      ],
+            this.createDoctorStatsTable(scheduleData)
+          ]
+        }
+      ]
     })
 
-    const buffer = await Packer.toBuffer(doc)
-    return buffer
+    return await Packer.toBuffer(doc)
   }
 
   /**
    * 创建值班表
    */
-  private createDutyTable(scheduleData: ScheduleData): Table {
-    const { dates, dutySchedule } = scheduleData
+  private createDutyScheduleTable(scheduleData: ScheduleData): Table {
+    const { dates, dutySchedule, datesWithWeek } = scheduleData
 
     return new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
@@ -568,13 +615,13 @@ export class ScheduleService {
               children: [
                 new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] }),
               ],
-              width: { size: 30, type: WidthType.PERCENTAGE },
+              width: { size: 50, type: WidthType.PERCENTAGE },
             }),
             new TableCell({
               children: [
                 new Paragraph({ children: [new TextRun({ text: '值班医生', bold: true })] }),
               ],
-              width: { size: 70, type: WidthType.PERCENTAGE },
+              width: { size: 50, type: WidthType.PERCENTAGE },
             }),
           ],
         }),
@@ -583,20 +630,12 @@ export class ScheduleService {
             new TableRow({
               children: [
                 new TableCell({
-                  children: [new Paragraph({ children: [new TextRun(date)] })],
-                  width: { size: 30, type: WidthType.PERCENTAGE },
+                  children: [new Paragraph({ children: [new TextRun(datesWithWeek[dates.indexOf(date)])] })],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
                 }),
                 new TableCell({
-                  children: [
-                    new Paragraph({
-                      children: [
-                        new TextRun(
-                          dutySchedule[date] || '-'
-                        ),
-                      ],
-                    }),
-                  ],
-                  width: { size: 70, type: WidthType.PERCENTAGE },
+                  children: [new Paragraph({ children: [new TextRun(dutySchedule[date] || '-')] })],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
                 }),
               ],
             })
@@ -612,20 +651,19 @@ export class ScheduleService {
   }
 
   /**
-   * 创建医生排班表
+   * 创建白班排班表
    */
-  private createDoctorScheduleTable(scheduleData: ScheduleData): Table {
-    const { dates, datesWithWeek, doctorSchedule } = scheduleData
+  private createDayScheduleTable(scheduleData: ScheduleData): Table {
+    const { dates, datesWithWeek, departments, schedule } = scheduleData
 
     return new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [
-        // 表头
         new TableRow({
           children: [
             new TableCell({
               children: [
-                new Paragraph({ children: [new TextRun({ text: '医生', bold: true })] }),
+                new Paragraph({ children: [new TextRun({ text: '科室', bold: true })] }),
               ],
               width: { size: 15, type: WidthType.PERCENTAGE },
             }),
@@ -633,108 +671,32 @@ export class ScheduleService {
               (date) =>
                 new TableCell({
                   children: [
-                    new Paragraph({ children: [new TextRun({ text: date, bold: true })] }),
+                    new Paragraph({ children: [new TextRun({ text: datesWithWeek[dates.indexOf(date)], bold: true, size: 18 })] }),
                   ],
                   width: { size: 85 / dates.length, type: WidthType.PERCENTAGE },
                 })
             ),
           ],
         }),
-        // 数据行
-        ...Object.values(doctorSchedule).map(
-          (info) =>
+        ...departments.map(
+          (department) =>
             new TableRow({
               children: [
                 new TableCell({
-                  children: [new Paragraph({ children: [new TextRun(info.name)] })],
+                  children: [new Paragraph({ children: [new TextRun({ text: department, bold: true })] })],
                   width: { size: 15, type: WidthType.PERCENTAGE },
                 }),
-                ...dates.map(
-                  (date) => {
-                    const shift = info.shifts[date]
-                    const department = info.departmentsByDate[date]
-                    let shiftText = '-'
-                    
-                    if (shift === 'night') {
-                      shiftText = `${department || '值班'} 夜班`
-                    } else if (shift === 'morning') {
-                      shiftText = department || '休息'
-                    }
-
-                    return new TableCell({
-                      children: [new Paragraph({ children: [new TextRun(shiftText)] })],
-                      width: { size: 85 / dates.length, type: WidthType.PERCENTAGE },
-                    })
-                  }
-                ),
-              ],
-            })
-        ),
-      ],
-      borders: {
-        top: { style: BorderStyle.SINGLE },
-        bottom: { style: BorderStyle.SINGLE },
-        left: { style: BorderStyle.SINGLE },
-        right: { style: BorderStyle.SINGLE },
-      },
-    })
-  }
-
-  /**
-   * 创建医生统计表
-   */
-
-  /**
-   * 创建排班表
-   */
-  private createScheduleTable(scheduleData: ScheduleData): Table {
-    const { dates, departments, schedule } = scheduleData
-
-    return new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: [
-        // 表头
-        new TableRow({
-          children: [
-            new TableCell({
-              children: [
-                new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] }),
-              ],
-              width: { size: 15, type: WidthType.PERCENTAGE },
-            }),
-            ...departments.map(
-              (dept) =>
-                new TableCell({
-                  children: [
-                    new Paragraph({ children: [new TextRun({ text: dept, bold: true })] }),
-                  ],
-                  width: { size: 85 / departments.length, type: WidthType.PERCENTAGE },
-                })
-            ),
-          ],
-        }),
-        // 数据行
-        ...dates.map(
-          (date) =>
-            new TableRow({
-              children: [
-                new TableCell({
-                  children: [new Paragraph({ children: [new TextRun(date)] })],
-                  width: { size: 15, type: WidthType.PERCENTAGE },
+                ...dates.map((date) => {
+                  const slots = schedule[date]?.[department] || []
+                  const doctors = slots.map((s) => {
+                    const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
+                    return `${s.doctor}${suffix}`
+                  }).join('、')
+                  return new TableCell({
+                    children: [new Paragraph({ children: [new TextRun(doctors || '-')] })],
+                    width: { size: 85 / dates.length, type: WidthType.PERCENTAGE },
+                  })
                 }),
-                ...departments.map(
-                  (dept) => {
-                    const slots = schedule[date]?.[dept] || []
-                    const doctors = slots.map(s => {
-                      const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
-                      return `${s.doctor}${suffix}`
-                    }).join('、')
-                    return new TableCell({
-                      children: [new Paragraph({ children: [new TextRun(doctors || '-')] })],
-                      width: { size: 85 / departments.length, type: WidthType.PERCENTAGE },
-                    })
-                  }
-                ),
               ],
             })
         ),
@@ -833,11 +795,9 @@ export class ScheduleService {
    * @param requirements AI需求文本
    * @returns 解析后的约束条件
    */
-  private parseAiRequirements(requirements: string): {
-    doctorConstraints: Record<string, { departments: string[]; days: string[]; offDays: string[] }>
-  } {
-    const result = {
-      doctorConstraints: {} as Record<string, { departments: string[]; days: string[]; offDays: string[] }>
+  private parseAiRequirements(requirements: string): AiConstraints {
+    const result: AiConstraints = {
+      doctorConstraints: {}
     }
 
     if (!requirements.trim()) {
@@ -848,11 +808,29 @@ export class ScheduleService {
     const lines = requirements.split(/[。,，\n]/).filter(line => line.trim())
 
     lines.forEach(line => {
+      const trimmedLine = line.trim()
+      
+      // 解析"医生必须每天在科室"的规则
+      const mustEveryDayInDeptMatch = trimmedLine.match(/(.+?)必须每天(在)?(.+?诊室)/)
+      if (mustEveryDayInDeptMatch) {
+        const doctor = mustEveryDayInDeptMatch[1].trim()
+        const department = mustEveryDayInDeptMatch[3].trim()
+        
+        console.log(`解析到AI约束: ${doctor} 必须每天在 ${department}`)
+        
+        if (!result.doctorConstraints[doctor]) {
+          result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
+        }
+        result.doctorConstraints[doctor].departments.push(department)
+      }
+
       // 解析"医生必须在科室"的规则
-      const mustInDeptMatch = line.match(/(.+?)必须(在)?(.+?诊室)/)
-      if (mustInDeptMatch) {
+      const mustInDeptMatch = trimmedLine.match(/(.+?)必须(在)?(.+?诊室)/)
+      if (mustInDeptMatch && !trimmedLine.includes('每天')) {
         const doctor = mustInDeptMatch[1].trim()
         const department = mustInDeptMatch[3].trim()
+        
+        console.log(`解析到AI约束: ${doctor} 必须在 ${department}`)
         
         if (!result.doctorConstraints[doctor]) {
           result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
@@ -861,10 +839,12 @@ export class ScheduleService {
       }
 
       // 解析"医生某天休息"的规则
-      const restDayMatch = line.match(/(.+?)(周一|周二|周三|周四|周五|周六|周日)休息/)
+      const restDayMatch = trimmedLine.match(/(.+?)(周一|周二|周三|周四|周五|周六|周日)休息/)
       if (restDayMatch) {
         const doctor = restDayMatch[1].trim()
         const dayOfWeek = restDayMatch[2].trim()
+        
+        console.log(`解析到AI约束: ${doctor} ${dayOfWeek} 休息`)
         
         if (!result.doctorConstraints[doctor]) {
           result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
