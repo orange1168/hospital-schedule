@@ -1,10 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun } from 'docx'
 
-// 固定的医生列表（14人）
+// 固定的医生列表（16人）
 const FIXED_DOCTORS = [
   '李茜', '姜维', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎', '杨波',
-  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
+  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇', '张三', '李四'
 ]
 
 // 班次类型
