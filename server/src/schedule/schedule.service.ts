@@ -301,11 +301,20 @@ export class ScheduleService {
     })
 
     dates.forEach((date, dateIndex) => {
+      // 🔴 CRITICAL: 在循环开始时，将 nextDayOff 中的医生标记为休息
+      nextDayOff.forEach(doctor => {
+        doctorSchedule[doctor].shifts[date] = 'off'
+      })
+
+      // 清空 nextDayOff，以便在分配夜班后重新填充
+      nextDayOff.clear()
+
       const doctorsOff = Array.from(nextDayOff)
       const doctorsWorking = availableDoctors.filter(d => 
         !doctorsOff.includes(d) && 
         !isDoctorOnLeave(d, date) &&
-        doctorSchedule[d].shifts[date] !== 'night'
+        doctorSchedule[d].shifts[date] !== 'night' &&
+        doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已经标记为休息的医生
       )
 
       // 判断是否是周末（周六或周日）
@@ -362,9 +371,7 @@ export class ScheduleService {
           }
         }
       })
-
-      // 清除第二天的休息标记
-      nextDayOff.clear()
+      // 🔴 注意：不再在这里清空 nextDayOff，因为已经在循环开始时清空了
     })
 
     // 计算上午班和下午班的天数
