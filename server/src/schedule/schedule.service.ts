@@ -57,18 +57,20 @@ export class ScheduleService {
   /**
    * 生成排班表
    * @param startDate 开始日期（YYYY-MM-DD）
-   * @param doctors 医生列表
+   * @param doctors 医生列表（可选，不传则使用默认的14位医生）
    * @param dutyStartDoctor 值班起始医生
    * @param leaveDoctors 请假医生列表（字符串数组或对象数组）
+   * @param aiRequirements AI排班需求（可选）
    */
   generateSchedule(
     startDate: string,
     doctors?: string[],
     dutyStartDoctor?: string,
-    leaveDoctors?: string[] | LeaveInfo[]
+    leaveDoctors?: string[] | LeaveInfo[],
+    aiRequirements?: string
   ): ScheduleData {
     // 使用用户输入的医生列表，如果没有则使用默认的医生列表
-    const doctorList = doctors && doctors.length > 0 ? doctors : []
+    const doctorList = doctors && doctors.length > 0 ? doctors : FIXED_DOCTORS
     
     // 将请假信息转换为统一格式：Record<doctorName, date[]>
     const leaveMap: Record<string, string[]> = {}
@@ -87,6 +89,11 @@ export class ScheduleService {
     console.log('开始生成排班，医生列表:', doctorList)
     console.log('值班起始医生:', dutyStartDoctor)
     console.log('请假医生:', leaveMap)
+    console.log('AI排班需求:', aiRequirements)
+
+    // 解析AI排班需求
+    const aiConstraints = this.parseAiRequirements(aiRequirements || '')
+    console.log('解析的AI约束:', aiConstraints)
 
     if (doctorList.length === 0) {
       throw new BadRequestException('请至少添加一名医生')
@@ -819,5 +826,53 @@ export class ScheduleService {
         right: { style: BorderStyle.SINGLE },
       },
     })
+  }
+
+  /**
+   * 解析AI排班需求
+   * @param requirements AI需求文本
+   * @returns 解析后的约束条件
+   */
+  private parseAiRequirements(requirements: string): {
+    doctorConstraints: Record<string, { departments: string[]; days: string[]; offDays: string[] }>
+  } {
+    const result = {
+      doctorConstraints: {} as Record<string, { departments: string[]; days: string[]; offDays: string[] }>
+    }
+
+    if (!requirements.trim()) {
+      return result
+    }
+
+    // 简单规则解析（实际应用中可以使用LLM进行更复杂的解析）
+    const lines = requirements.split(/[。,，\n]/).filter(line => line.trim())
+
+    lines.forEach(line => {
+      // 解析"医生必须在科室"的规则
+      const mustInDeptMatch = line.match(/(.+?)必须(在)?(.+?诊室)/)
+      if (mustInDeptMatch) {
+        const doctor = mustInDeptMatch[1].trim()
+        const department = mustInDeptMatch[3].trim()
+        
+        if (!result.doctorConstraints[doctor]) {
+          result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
+        }
+        result.doctorConstraints[doctor].departments.push(department)
+      }
+
+      // 解析"医生某天休息"的规则
+      const restDayMatch = line.match(/(.+?)(周一|周二|周三|周四|周五|周六|周日)休息/)
+      if (restDayMatch) {
+        const doctor = restDayMatch[1].trim()
+        const dayOfWeek = restDayMatch[2].trim()
+        
+        if (!result.doctorConstraints[doctor]) {
+          result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
+        }
+        result.doctorConstraints[doctor].offDays.push(dayOfWeek)
+      }
+    })
+
+    return result
   }
 }

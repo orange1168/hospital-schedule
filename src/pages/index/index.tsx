@@ -1,4 +1,4 @@
-import { View, Text, Button, ScrollView, Picker } from '@tarojs/components'
+import { View, Text, Button, ScrollView, Picker, Textarea } from '@tarojs/components'
 import { useState } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
@@ -35,6 +35,11 @@ const IndexPage = () => {
   const [showDutyStartPicker, setShowDutyStartPicker] = useState(false)
   const [loading, setLoading] = useState(false)
   
+  // AI排班需求相关状态
+  const [aiRequirements, setAiRequirements] = useState('')
+  const [showAiInput, setShowAiInput] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  
   // 请假相关状态
   const [showLeaveSelector, setShowLeaveSelector] = useState(false)
   const [leaveRecords, setLeaveRecords] = useState<Array<{ doctor: string; dates: string[] }>>([])
@@ -62,14 +67,15 @@ const IndexPage = () => {
     setLoading(true)
 
     try {
-      console.log('开始生成排班，参数:', { startDate, dutyStartDoctor, leaveRecords })
+      console.log('开始生成排班，参数:', { startDate, dutyStartDoctor, leaveRecords, aiRequirements })
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
         data: {
           startDate,
           dutyStartDoctor,
-          leaveDoctors: leaveRecords
+          leaveDoctors: leaveRecords,
+          aiRequirements // 传递AI需求
         }
       })
       console.log('排班生成响应:', res.data)
@@ -203,6 +209,89 @@ const IndexPage = () => {
     setLeaveRecords(leaveRecords.filter((_, i) => i !== index))
   }
 
+  // 开始录音
+  const handleStartRecording = () => {
+    const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP
+    
+    if (!isWeapp) {
+      Taro.showToast({
+        title: '语音输入仅在小程序中可用',
+        icon: 'none'
+      })
+      return
+    }
+
+    const recorderManager = Taro.getRecorderManager()
+    
+    recorderManager.onStart(() => {
+      console.log('录音开始')
+      setIsRecording(true)
+      Taro.showToast({
+        title: '开始录音...',
+        icon: 'none'
+      })
+    })
+
+    recorderManager.onStop((res) => {
+      console.log('录音结束，文件路径:', res.tempFilePath)
+      setIsRecording(false)
+      
+      // 上传音频并转换为文本
+      handleProcessAudio(res.tempFilePath)
+    })
+
+    recorderManager.onError((err) => {
+      console.error('录音错误', err)
+      setIsRecording(false)
+      Taro.showToast({
+        title: '录音失败',
+        icon: 'none'
+      })
+    })
+
+    recorderManager.start({
+      format: 'mp3',
+      duration: 30000, // 最长30秒
+    })
+  }
+
+  // 处理音频文件
+  const handleProcessAudio = async (audioPath: string) => {
+    try {
+      Taro.showLoading({ title: '处理中...' })
+      
+      // 上传音频文件到后端进行语音识别
+      const res = await Network.uploadFile({
+        url: '/api/schedule/speech-to-text',
+        filePath: audioPath,
+        name: 'audio'
+      })
+      
+      const data = JSON.parse(res.data)
+      
+      if (data.code === 200 && data.data.text) {
+        setAiRequirements(data.data.text)
+        Taro.showToast({
+          title: '语音识别成功',
+          icon: 'success'
+        })
+      } else {
+        Taro.showToast({
+          title: '语音识别失败',
+          icon: 'none'
+        })
+      }
+    } catch (error) {
+      console.error('处理音频失败:', error)
+      Taro.showToast({
+        title: '处理失败',
+        icon: 'none'
+      })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
   return (
     <ScrollView scrollY className="h-screen bg-gray-50">
       <View className="bg-white p-4 mb-4 shadow-sm">
@@ -223,15 +312,30 @@ const IndexPage = () => {
             </View>
           </View>
 
-          {/* 固定医生说明 */}
-          <View className="flex flex-row items-center gap-2 bg-blue-50 p-3 rounded-lg">
-            <Text className="block text-sm text-blue-600 font-medium">
-              使用固定的14位医生自动排班
-            </Text>
+          {/* 固定医生列表 */}
+          <View className="flex flex-col gap-2 mt-2">
+            <Text className="block text-sm font-medium text-gray-700">排班医生：</Text>
+            <View className="bg-gray-50 rounded-lg p-3">
+              <Text className="block text-xs text-gray-600 mb-2">14位固定医生：</Text>
+              <View className="flex flex-row flex-wrap gap-2">
+                {FIXED_DOCTORS.map((doctor) => (
+                  <View
+                    key={doctor}
+                    className={`px-2 py-1 rounded text-xs ${
+                      doctor === dutyStartDoctor
+                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                        : 'bg-white text-gray-600 border border-gray-300'
+                    }`}
+                  >
+                    <Text className="block text-xs">{doctor}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           </View>
 
           {/* 值班起始医生 */}
-          <View className="flex flex-row items-center gap-2">
+          <View className="flex flex-row items-center gap-2 mt-2">
             <Text className="block text-sm font-medium w-24">值班起始：</Text>
             <View 
               className="flex-1 bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200 active:bg-blue-100" 
@@ -256,6 +360,45 @@ const IndexPage = () => {
               <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'transparent', zIndex: 9999 }}></View>
             </Picker>
           )}
+
+          {/* AI排班需求 */}
+          <View className="mt-4 bg-purple-50 rounded-lg p-3">
+            <View className="flex flex-row items-center justify-between mb-2">
+              <Text className="block text-sm font-medium">AI排班需求：</Text>
+              <Button
+                className="px-3 py-1 bg-purple-500 text-white rounded text-xs"
+                onTap={() => setShowAiInput(!showAiInput)}
+              >
+                {showAiInput ? '隐藏' : '显示'}
+              </Button>
+            </View>
+            
+            {showAiInput && (
+              <View className="flex flex-col gap-2">
+                <Text className="block text-xs text-gray-600">
+                  输入特殊排班要求，例如：&ldquo;李茜必须排在1诊室&rdquo;、&ldquo;姜维周二休息&rdquo;
+                </Text>
+                <View className="flex flex-row gap-2 items-center">
+                  <View className="flex-1 bg-white rounded-lg p-2">
+                    <Textarea
+                      className="w-full text-sm"
+                      placeholder="输入排班要求（可选）"
+                      value={aiRequirements}
+                      onInput={(e) => setAiRequirements(e.detail.value)}
+                      maxlength={500}
+                    />
+                  </View>
+                  <Button
+                    className={`px-3 py-2 rounded text-xs ${isRecording ? 'bg-red-500' : 'bg-purple-500'} text-white`}
+                    onTap={isRecording ? () => {} : handleStartRecording}
+                    disabled={isRecording}
+                  >
+                    {isRecording ? '录音中...' : '🎤'}
+                  </Button>
+                </View>
+              </View>
+            )}
+          </View>
 
           {/* 请假设置 */}
           <View className="mt-4 bg-yellow-50 rounded-lg p-3">
