@@ -21,6 +21,7 @@ export interface ScheduleSlot {
 export interface DoctorSchedule {
   name: string
   shifts: Record<string, ShiftType> // key: date, value: shift type
+  nightShiftsByDate: Record<string, boolean> // key: date, value: 是否有夜班
   departmentsByDate: Record<string, string> // key: date, value: department name
   morningShifts: string[] // 上午班次的科室列表
   afternoonShifts: string[] // 下午班次的科室列表
@@ -74,6 +75,8 @@ export class ScheduleService {
     leaveDoctors?: string[] | LeaveInfo[],
     aiRequirements?: string
   ): ScheduleData {
+    console.log('🔥 generateSchedule 被调用，startDate:', startDate)
+
     // 使用用户输入的医生列表，如果没有则使用默认的医生列表
     const doctorList = doctors && doctors.length > 0 ? doctors : FIXED_DOCTORS
     
@@ -143,6 +146,7 @@ export class ScheduleService {
       doctorSchedule[doctor] = {
         name: doctor,
         shifts: {},
+        nightShiftsByDate: {},
         departmentsByDate: {},
         morningShifts: [],
         afternoonShifts: [],
@@ -192,6 +196,7 @@ export class ScheduleService {
     }
 
     // 步骤1：分配夜班
+    console.log('开始分配夜班...')
     this.assignNightShifts(
       dates,
       dutySchedule,
@@ -203,6 +208,7 @@ export class ScheduleService {
     )
 
     // 步骤2：分配上午和下午班次
+    console.log('开始分配白班...')
     this.assignDayShifts(
       dates,
       schedule,
@@ -303,7 +309,8 @@ export class ScheduleService {
       }
 
       dutySchedule[date] = selectedDoctor
-      doctorSchedule[selectedDoctor].shifts[date] = 'night'
+      doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true
+      doctorSchedule[selectedDoctor].shifts[date] = 'night' // 夜班医生当天为夜班
       doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
@@ -347,6 +354,7 @@ export class ScheduleService {
 
     dates.forEach((date, dateIndex) => {
       // 🔴 CRITICAL: 在循环开始时，将 nextDayOff 中的医生标记为休息
+      const todayOff = Array.from(nextDayOff)
       nextDayOff.forEach(doctor => {
         doctorSchedule[doctor].shifts[date] = 'off'
         console.log(`${date} ${doctor} 因前一天夜班而强制休息`)
@@ -355,11 +363,12 @@ export class ScheduleService {
       // 清空 nextDayOff，以便在分配夜班后重新填充
       nextDayOff.clear()
 
-      const doctorsOff = Array.from(nextDayOff)
+      const doctorsOff = todayOff
       const doctorsWorking = availableDoctors.filter(d => 
         !doctorsOff.includes(d) && 
         !isDoctorOnLeave(d, date) &&
-        !isDoctorOffByAi(d, date) // 🔴 排除AI约束指定休息的医生
+        !isDoctorOffByAi(d, date) &&
+        doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已标记为休息的医生
       )
 
       // 判断是否是周末（周六或周日）
@@ -396,8 +405,11 @@ export class ScheduleService {
           // 如果没有AI约束，则选择工作天数最少的医生
           if (!bestDoctor) {
             for (const doctor of doctorsWorking) {
-              // 检查这个医生今天是否已经排班（包括夜班和白班）
-              if (!doctorSchedule[doctor].shifts[date] || doctorSchedule[doctor].shifts[date] === 'off') {
+              // 检查这个医生今天是否已经排班
+              const alreadyHasShift = doctorSchedule[doctor].shifts[date] && 
+                                     doctorSchedule[doctor].shifts[date] !== 'off'
+              
+              if (!alreadyHasShift) {
                 if (doctorWorkDays[doctor] < minWorkDays) {
                   minWorkDays = doctorWorkDays[doctor]
                   bestDoctor = doctor
@@ -420,10 +432,13 @@ export class ScheduleService {
               department: dept
             })
 
-            // 🔴 CRITICAL: 只有当医生当天没有夜班时，才设置为 morning
-            // 如果医生当天有夜班，保留 night 标记
-            if (!doctorSchedule[bestDoctor].shifts[date]) {
+            // 🔴 CRITICAL: 只有当医生今天没有班次时，才设置为 morning
+            // 如果医生当天有夜班，保留 night 标记，但仍然记录科室
+            if (!doctorSchedule[bestDoctor].shifts[date] || doctorSchedule[bestDoctor].shifts[date] === 'off') {
               doctorSchedule[bestDoctor].shifts[date] = 'morning'
+            } else if (doctorSchedule[bestDoctor].shifts[date] === 'night') {
+              // 夜班医生也记录科室，但保持 night 标记
+              doctorSchedule[bestDoctor].departmentsByDate[date] = dept
             }
             
             doctorSchedule[bestDoctor].departmentsByDate[date] = dept // 记录科室
