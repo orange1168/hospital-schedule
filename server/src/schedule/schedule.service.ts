@@ -207,12 +207,29 @@ export class ScheduleService {
       isDoctorOnLeave
     )
 
+    // 🔴 CRITICAL: 在白班分配前，构建完整的休息日期映射
+    // key: date, value: Set<doctor>
+    const restDatesMap: Record<string, Set<string>> = {}
+    dates.forEach((date, index) => {
+      if (index + 1 < dates.length) {
+        const nextDate = dates[index + 1]
+        const dutyDoctor = dutySchedule[date]
+        if (dutyDoctor) {
+          if (!restDatesMap[nextDate]) {
+            restDatesMap[nextDate] = new Set()
+          }
+          restDatesMap[nextDate].add(dutyDoctor)
+          console.log(`${date} 值班医生 ${dutyDoctor}，${nextDate} 强制休息`)
+        }
+      }
+    })
+
     // 步骤2：分配上午和下午班次
     console.log('开始分配白班...')
     this.assignDayShifts(
       dates,
       schedule,
-      nextDayOff,
+      restDatesMap,
       availableDoctors,
       doctorSchedule,
       isDoctorOnLeave,
@@ -309,8 +326,9 @@ export class ScheduleService {
       }
 
       dutySchedule[date] = selectedDoctor
-      doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true
-      doctorSchedule[selectedDoctor].shifts[date] = 'night' // 夜班医生当天为夜班
+      doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true // 标记有夜班
+      // 🔴 CRITICAL: 不设置 shifts[date]，让白班分配时设置为 'morning'
+      // doctorSchedule[selectedDoctor].shifts[date] = 'night' // 移除这行
       doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
@@ -333,13 +351,56 @@ export class ScheduleService {
   private assignDayShifts(
     dates: string[],
     schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    nextDayOff: Set<string>,
+    restDatesMap: Record<string, Set<string>>,
     availableDoctors: string[],
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
     isDoctorOffByAi: (doctor: string, date: string) => boolean,
     getRequiredDepartment: (doctor: string, date: string) => string | null
   ): void {
+    // ✅ 新增：预先给非夜班医生分配休息日，确保所有医生都有至少1天休息
+    const restAssigned: Set<string> = new Set() // 已分配休息的医生
+    const nightDoctors: Set<string> = new Set() // 夜班医生集合
+    
+    // 收集所有夜班医生
+    Object.values(doctorSchedule).forEach(info => {
+      if (info.nightShifts > 0) {
+        nightDoctors.add(info.name)
+      }
+    })
+    
+    // 随机给非夜班医生分配休息日（确保每人至少1天）
+    const nonNightDoctors = availableDoctors.filter(doc => !nightDoctors.has(doc))
+    if (nonNightDoctors.length > 0) {
+      // 随机打乱顺序
+      const shuffled = [...nonNightDoctors].sort(() => Math.random() - 0.5)
+      
+      // 从第3天开始分配休息日（避开夜班医生的休息日高峰）
+      let restDayIndex = 2
+      shuffled.forEach(doctor => {
+        // 找到可用的工作日（不是夜班医生的休息日）
+        while (restDayIndex < dates.length) {
+          const restDate = dates[restDayIndex]
+          const restSet = restDatesMap[restDate] || new Set()
+          
+          // 检查这天是否已经有太多休息医生（避免某天休息人数过多）
+          const totalRestToday = (restDatesMap[restDate]?.size || 0) + 1
+          
+          if (totalRestToday <= 3) { // 每天最多3人休息
+            if (!restDatesMap[restDate]) {
+              restDatesMap[restDate] = new Set()
+            }
+            restDatesMap[restDate].add(doctor)
+            restAssigned.add(doctor)
+            console.log(`预先分配：${doctor} 在 ${restDate} 休息`)
+            restDayIndex = (restDayIndex + 1) % dates.length
+            break
+          }
+          restDayIndex = (restDayIndex + 1) % dates.length
+        }
+      })
+    }
+
     // 记录每个医生的工作天数
     const doctorWorkDays: Record<string, number> = {}
     availableDoctors.forEach(doctor => {
@@ -353,19 +414,15 @@ export class ScheduleService {
     })
 
     dates.forEach((date, dateIndex) => {
-      // 🔴 CRITICAL: 在循环开始时，将 nextDayOff 中的医生标记为休息
-      const todayOff = Array.from(nextDayOff)
-      nextDayOff.forEach(doctor => {
+      // 🔴 CRITICAL: 标记当天需要休息的医生
+      const todayOff = restDatesMap[date] || new Set()
+      todayOff.forEach(doctor => {
         doctorSchedule[doctor].shifts[date] = 'off'
         console.log(`${date} ${doctor} 因前一天夜班而强制休息`)
       })
 
-      // 清空 nextDayOff，以便在分配夜班后重新填充
-      nextDayOff.clear()
-
-      const doctorsOff = todayOff
       const doctorsWorking = availableDoctors.filter(d => 
-        !doctorsOff.includes(d) && 
+        !todayOff.has(d) && 
         !isDoctorOnLeave(d, date) &&
         !isDoctorOffByAi(d, date) &&
         doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已标记为休息的医生
@@ -404,17 +461,27 @@ export class ScheduleService {
 
           // 如果没有AI约束，则选择工作天数最少的医生
           if (!bestDoctor) {
+            // 找出所有工作天数最少且当天没有排班的医生
+            const candidates: string[] = []
             for (const doctor of doctorsWorking) {
-              // 检查这个医生今天是否已经排班
-              const alreadyHasShift = doctorSchedule[doctor].shifts[date] && 
-                                     doctorSchedule[doctor].shifts[date] !== 'off'
+              // 检查这个医生今天是否已经排过白班（不包括夜班）
+              const alreadyHasDayShift = doctorSchedule[doctor].shifts[date] && 
+                                         doctorSchedule[doctor].shifts[date] !== 'off'
               
-              if (!alreadyHasShift) {
+              if (!alreadyHasDayShift) {
                 if (doctorWorkDays[doctor] < minWorkDays) {
                   minWorkDays = doctorWorkDays[doctor]
-                  bestDoctor = doctor
+                  candidates.length = 0 // 清空候选列表
+                }
+                if (doctorWorkDays[doctor] === minWorkDays) {
+                  candidates.push(doctor)
                 }
               }
+            }
+            
+            // 随机选择一个候选医生
+            if (candidates.length > 0) {
+              bestDoctor = candidates[Math.floor(Math.random() * candidates.length)]
             }
           }
 
@@ -432,15 +499,8 @@ export class ScheduleService {
               department: dept
             })
 
-            // 🔴 CRITICAL: 只有当医生今天没有班次时，才设置为 morning
-            // 如果医生当天有夜班，保留 night 标记，但仍然记录科室
-            if (!doctorSchedule[bestDoctor].shifts[date] || doctorSchedule[bestDoctor].shifts[date] === 'off') {
-              doctorSchedule[bestDoctor].shifts[date] = 'morning'
-            } else if (doctorSchedule[bestDoctor].shifts[date] === 'night') {
-              // 夜班医生也记录科室，但保持 night 标记
-              doctorSchedule[bestDoctor].departmentsByDate[date] = dept
-            }
-            
+            // 🔴 CRITICAL: 设置白班状态
+            doctorSchedule[bestDoctor].shifts[date] = 'morning'
             doctorSchedule[bestDoctor].departmentsByDate[date] = dept // 记录科室
             doctorSchedule[bestDoctor].morningShifts.push(dept)
             doctorSchedule[bestDoctor].afternoonShifts.push(dept)
@@ -451,7 +511,17 @@ export class ScheduleService {
               doctorWorkDays[bestDoctor]++
             }
             
-            console.log(`${date} ${dept} 分配给 ${bestDoctor}`)
+            // ✅ 新增：如果医生工作天数达到5天，强制安排下一天休息
+            if (doctorWorkDays[bestDoctor] >= 5 && dateIndex + 1 < dates.length) {
+              const nextDate = dates[dateIndex + 1]
+              if (!restDatesMap[nextDate]) {
+                restDatesMap[nextDate] = new Set()
+              }
+              restDatesMap[nextDate].add(bestDoctor)
+              console.log(`${bestDoctor} 工作满5天，${nextDate} 强制休息`)
+            }
+            
+            console.log(`${date} ${dept} 分配给 ${bestDoctor} ${doctorSchedule[bestDoctor].nightShiftsByDate[date] ? '(夜班)' : ''}`)
           } else {
             console.log(`${date} ${dept} 没有找到合适的医生`)
           }
