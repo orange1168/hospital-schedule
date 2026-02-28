@@ -648,13 +648,15 @@ const IndexPage = () => {
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'
                         
-                        // 🔴 优先检查是否有夜班
-                        if (hasNightShift) {
-                          shiftText = '值班'
-                          shiftColor = 'text-red-600'
-                        } else if (shift === 'morning') {
-                          shiftText = department || '休息'
-                          shiftColor = 'text-blue-600'
+                        // 🔴 显示逻辑：值班医生在科室后添加"（值班）"
+                        if (shift === 'morning') {
+                          if (hasNightShift) {
+                            shiftText = `${department || '值班'}（值班）`
+                            shiftColor = 'text-red-600'
+                          } else {
+                            shiftText = department || '休息'
+                            shiftColor = 'text-blue-600'
+                          }
                         } else if (shift === 'night') {
                           shiftText = '值班 夜班'
                           shiftColor = 'text-red-600'
