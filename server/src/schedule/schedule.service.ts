@@ -160,9 +160,6 @@ export class ScheduleService {
       }
     })
 
-    // 标记夜班后需要休息的医生
-    const nextDayOff: Set<string> = new Set()
-
     // 检查医生在特定日期是否请假
     const isDoctorOnLeave = (doctor: string, date: string): boolean => {
       const isLeave = !leaveMap[doctor] ? false : (leaveMap[doctor].length === 0 || leaveMap[doctor].includes(date))
@@ -207,7 +204,6 @@ export class ScheduleService {
       dutySchedule,
       availableDoctors,
       dutyStartDoctor,
-      nextDayOff,
       doctorSchedule,
       isDoctorOnLeave,
       restDatesMap // 🔴 传递 restDatesMap 参数
@@ -262,7 +258,6 @@ export class ScheduleService {
     dutySchedule: Record<string, string>,
     availableDoctors: string[],
     dutyStartDoctor: string | undefined,
-    nextDayOff: Set<string>,
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
     restDatesMap: Record<string, Set<string>> // 🔴 添加 restDatesMap 参数
@@ -277,8 +272,19 @@ export class ScheduleService {
     // 避免因医生数量不一致导致的索引错误
     let doctorIndex = 0
 
+    // 🔴 CRITICAL: 记录每个医生不能值班的剩余天数（确保至少休息2天）
+    const doctorDutyBlockDays: Record<string, number> = {}
+
     dates.forEach((date, index) => {
-      // 找到下一个可用的医生（跳过请假医生和第二天需要休息的医生）
+      // 🔴 CRITICAL: 每天开始前，减少所有医生的不能值班天数
+      Object.keys(doctorDutyBlockDays).forEach(doctor => {
+        if (doctorDutyBlockDays[doctor] > 0) {
+          doctorDutyBlockDays[doctor]--
+          console.log(`🔴 ${doctor} 剩余不能值班天数: ${doctorDutyBlockDays[doctor]}`)
+        }
+      })
+
+      // 找到下一个可用的医生（跳过请假医生和不能值班的医生）
       let attempts = 0
       let selectedDoctor = ''
 
@@ -286,12 +292,12 @@ export class ScheduleService {
       while (attempts < availableDoctors.length * 2) {
         const doctor = availableDoctors[doctorIndex % availableDoctors.length]
         const isOnLeave = isDoctorOnLeave(doctor, date)
-        const isNextDayOff = nextDayOff.has(doctor)
+        const blockDays = doctorDutyBlockDays[doctor] || 0
 
-        console.log(`🔴值班检查 ${date}: 医生=${doctor}, 请假=${isOnLeave}, 次日休息=${isNextDayOff}`)
+        console.log(`🔴值班检查 ${date}: 医生=${doctor}, 请假=${isOnLeave}, 不能值班天数=${blockDays}`)
 
-        // 🔴 CRITICAL: 必须排除第二天需要休息的医生
-        if (!isOnLeave && !isNextDayOff) {
+        // 🔴 CRITICAL: 必须排除不能值班的医生（至少休息2天）
+        if (!isOnLeave && blockDays === 0) {
           selectedDoctor = doctor
           console.log(`🔴值班选择 ${date}: ${selectedDoctor}`)
           break
@@ -306,15 +312,13 @@ export class ScheduleService {
         let availableIndex = 0
         while (attempts < availableDoctors.length * 2) {
           const doctor = availableDoctors[availableIndex % availableDoctors.length]
-          
-          if (
-            !isDoctorOnLeave(doctor, date) &&
-            !nextDayOff.has(doctor)
-          ) {
+          const blockDays = doctorDutyBlockDays[doctor] || 0
+
+          if (!isDoctorOnLeave(doctor, date) && blockDays === 0) {
             selectedDoctor = doctor
             break
           }
-          
+
           availableIndex++
           attempts++
         }
@@ -330,7 +334,7 @@ export class ScheduleService {
             break
           }
         }
-        
+
         // 如果还是没有找到，抛出异常
         if (!selectedDoctor) {
           throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假）`)
@@ -344,15 +348,29 @@ export class ScheduleService {
       doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
-      // 🔴 CRITICAL: 标记第二天需要休息（添加到 restDatesMap）
+      // 🔴 CRITICAL: 标记该医生不能在接下来2天内值班（至少休息2天）
+      // 第2天不能值班（休息）
       if (index + 1 < dates.length) {
         const nextDate = dates[index + 1]
         if (!restDatesMap[nextDate]) {
           restDatesMap[nextDate] = new Set()
         }
         restDatesMap[nextDate].add(selectedDoctor)
-        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextDate} 强制休息`)
+        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextDate} 强制休息（第1天）`)
       }
+      // 第3天不能值班（休息）
+      if (index + 2 < dates.length) {
+        const nextNextDate = dates[index + 2]
+        if (!restDatesMap[nextNextDate]) {
+          restDatesMap[nextNextDate] = new Set()
+        }
+        restDatesMap[nextNextDate].add(selectedDoctor)
+        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextNextDate} 强制休息（第2天）`)
+      }
+
+      // 🔴 CRITICAL: 设置该医生不能值班的剩余天数为2
+      doctorDutyBlockDays[selectedDoctor] = 2
+      console.log(`${date} 夜班医生 ${selectedDoctor}，接下来2天不能值班`)
 
       doctorIndex++
     })
@@ -562,7 +580,6 @@ export class ScheduleService {
           }
         }
       })
-      // 🔴 注意：不再在这里清空 nextDayOff，因为已经在循环开始时清空了
     })
 
     // 计算上午班和下午班的天数
