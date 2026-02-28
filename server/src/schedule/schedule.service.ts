@@ -288,62 +288,76 @@ export class ScheduleService {
         }
       })
 
-      // 找到下一个可用的医生（跳过请假医生和不能值班的医生）
-      let attempts = 0
+      // 🔴 CRITICAL: 智能选择值班医生 - 综合考虑累计休息天数和值班次数
       let selectedDoctor = ''
 
-      // 🔴 CRITICAL: 在可用医生列表中循环选择，而不是 FIXED_DOCTORS
-      while (attempts < availableDoctors.length * 2) {
-        const doctor = availableDoctors[doctorIndex % availableDoctors.length]
+      // 计算每个医生的优先级（综合累计休息天数和值班次数）
+      const doctorPriority: Record<string, number> = {}
+      availableDoctors.forEach(doctor => {
         const isOnLeave = isDoctorOnLeave(doctor, date)
         const blockDays = doctorDutyBlockDays[doctor] || 0
 
-        console.log(`🔴值班检查 ${date}: 医生=${doctor}, 请假=${isOnLeave}, 不能值班天数=${blockDays}`)
+        // 如果请假或不能值班，优先级设为 -1
+        if (isOnLeave || blockDays > 0) {
+          doctorPriority[doctor] = -1
+          console.log(`🔴 ${date} 医生 ${doctor}: 请假=${isOnLeave}, 不能值班=${blockDays}天, 优先级=-1`)
+        } else {
+          // 🔴 CRITICAL: 从 restDatesMap 中统计累计休息天数（更准确）
+          let totalRestDays = 0
+          for (let i = 0; i < index; i++) {
+            const checkDate = dates[i]
+            // 检查这天该医生是否在休息列表中
+            const isRest = restDatesMap[checkDate]?.has(doctor) || false
+            const isDutyDate = dutySchedule[checkDate] === doctor
 
-        // 🔴 CRITICAL: 必须排除不能值班的医生（至少休息2天）
-        if (!isOnLeave && blockDays === 0) {
-          selectedDoctor = doctor
-          console.log(`🔴值班选择 ${date}: ${selectedDoctor}`)
-          break
-        }
-
-        doctorIndex++
-        attempts++
-      }
-
-      // 如果在 FIXED_DOCTORS 中找不到，则在 availableDoctors 中找
-      if (!selectedDoctor && availableDoctors.length > 0) {
-        let availableIndex = 0
-        while (attempts < availableDoctors.length * 2) {
-          const doctor = availableDoctors[availableIndex % availableDoctors.length]
-          const blockDays = doctorDutyBlockDays[doctor] || 0
-
-          if (!isDoctorOnLeave(doctor, date) && blockDays === 0) {
-            selectedDoctor = doctor
-            break
+            // 如果这天是休息，且不是值班当天，则计入累计休息
+            if (isRest && !isDutyDate) {
+              totalRestDays++
+            }
           }
 
-          availableIndex++
-          attempts++
+          // 统计该医生已值班的次数
+          let dutyCount = 0
+          for (let i = 0; i < index; i++) {
+            if (dutySchedule[dates[i]] === doctor) {
+              dutyCount++
+            }
+          }
+
+          // 🔴 CRITICAL: 综合优先级 = (值班次数 * 1000) + (累计休息天数 * 10)
+          // 这样可以确保：
+          // - 值班次数少的医生优先级更高（确保公平轮流值班）
+          // - 值班次数相同时，累计休息天数多的医生优先级更高
+          const priority = dutyCount * 1000 + totalRestDays * 10
+          doctorPriority[doctor] = priority
+
+          console.log(`🔴 ${date} 医生 ${doctor}: 累计休息${totalRestDays}天, 已值班${dutyCount}次, 优先级=${priority}`)
         }
+      })
+
+      // 🔴 CRITICAL: 先过滤掉不能值班的医生（优先级为-1的）
+      const availableForDuty = availableDoctors.filter(doctor => doctorPriority[doctor] >= 0)
+
+      console.log(`🔴 ${date} 可值班医生: ${availableForDuty.join(', ')}`)
+      console.log(`🔴 ${date} 优先级: ${JSON.stringify(doctorPriority)}`)
+
+      if (availableForDuty.length === 0) {
+        throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假或处于值班休息期）`)
       }
+
+      // 🔴 CRITICAL: 选择优先级最低的医生（值班次数最少）
+      selectedDoctor = availableForDuty.reduce((best, current) => {
+        if (doctorPriority[current] < doctorPriority[best]) {
+          return current
+        }
+        return best
+      })
 
       if (!selectedDoctor) {
-        // 如果没有找到合适的医生，在可用医生中找一个没有请假的
-        console.warn(`${date} 没有找到合适的值班医生，尝试从可用医生中选择`)
-        for (const doctor of availableDoctors) {
-          if (!isDoctorOnLeave(doctor, date)) {
-            selectedDoctor = doctor
-            console.log(`${date} 选择值班医生: ${selectedDoctor} (fallback)`)
-            break
-          }
-        }
-
-        // 如果还是没有找到，抛出异常
-        if (!selectedDoctor) {
-          throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假）`)
-        }
+        throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假或处于值班休息期）`)
       }
+
+      console.log(`🔴值班选择 ${date}: ${selectedDoctor} (优先级: ${doctorPriority[selectedDoctor]})`)
 
       dutySchedule[date] = selectedDoctor
       doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true // 标记有夜班
@@ -413,7 +427,8 @@ export class ScheduleService {
     isDoctorOffByAi: (doctor: string, date: string) => boolean,
     getRequiredDepartment: (doctor: string, date: string) => string | null
   ): void {
-    // ✅ 新增：预先给非夜班医生分配休息日，确保所有医生都有至少1天休息
+    // 🔴 CRITICAL: 不预先分配休息日，让值班医生的选择更灵活
+    // 值班医生选择时优先选择休息时间最长的医生，自然确保公平
     const restAssigned: Set<string> = new Set() // 已分配休息的医生
     const nightDoctors: Set<string> = new Set() // 夜班医生集合
     
@@ -423,38 +438,6 @@ export class ScheduleService {
         nightDoctors.add(info.name)
       }
     })
-    
-    // 随机给非夜班医生分配休息日（确保每人至少1天）
-    const nonNightDoctors = availableDoctors.filter(doc => !nightDoctors.has(doc))
-    if (nonNightDoctors.length > 0) {
-      // 随机打乱顺序
-      const shuffled = [...nonNightDoctors].sort(() => Math.random() - 0.5)
-      
-      // 从第3天开始分配休息日（避开夜班医生的休息日高峰）
-      let restDayIndex = 2
-      shuffled.forEach(doctor => {
-        // 找到可用的工作日（不是夜班医生的休息日）
-        while (restDayIndex < dates.length) {
-          const restDate = dates[restDayIndex]
-          const restSet = restDatesMap[restDate] || new Set()
-          
-          // 检查这天是否已经有太多休息医生（避免某天休息人数过多）
-          const totalRestToday = (restDatesMap[restDate]?.size || 0) + 1
-          
-          if (totalRestToday <= 3) { // 每天最多3人休息
-            if (!restDatesMap[restDate]) {
-              restDatesMap[restDate] = new Set()
-            }
-            restDatesMap[restDate].add(doctor)
-            restAssigned.add(doctor)
-            console.log(`预先分配：${doctor} 在 ${restDate} 休息`)
-            restDayIndex = (restDayIndex + 1) % dates.length
-            break
-          }
-          restDayIndex = (restDayIndex + 1) % dates.length
-        }
-      })
-    }
 
     // 记录每个医生的工作天数
     const doctorWorkDays: Record<string, number> = {}
