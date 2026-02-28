@@ -35,19 +35,21 @@ const IndexPage = () => {
   const [showDutyStartPicker, setShowDutyStartPicker] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // 获取最近的周一
-  const getNearestMonday = (): string => {
+  // 获取下周一
+  const getNextMonday = (): string => {
     const now = new Date()
     const dayOfWeek = now.getDay() // 0=周日, 1=周一, ..., 6=周六
-    const daysUntilMonday = (dayOfWeek + 6) % 7 // 计算到周一的天数
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - daysUntilMonday)
-    return monday.toISOString().split('T')[0] // 返回 YYYY-MM-DD 格式
+    // 计算到下周一的天数
+    // 周日(0) -> 1天，周一(1) -> 7天，周二(2) -> 6天，...，周六(6) -> 2天
+    const daysUntilNextMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek)
+    const nextMonday = new Date(now)
+    nextMonday.setDate(now.getDate() + daysUntilNextMonday)
+    return nextMonday.toISOString().split('T')[0] // 返回 YYYY-MM-DD 格式
   }
 
   // 初始化默认值
   useEffect(() => {
-    setStartDate(getNearestMonday())
+    setStartDate(getNextMonday())
     setDutyStartDoctor('李茜')
   }, [])
   
