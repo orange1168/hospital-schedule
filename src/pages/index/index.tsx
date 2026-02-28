@@ -644,15 +644,20 @@ const IndexPage = () => {
                       {scheduleData.dates.map((date) => {
                         const shift = schedule?.shifts[date]
                         const department = (schedule as any)?.departmentsByDate?.[date]
+                        const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'
                         
-                        if (shift === 'night') {
-                          shiftText = `${department || '值班'} 夜班`
+                        // 🔴 优先检查是否有夜班
+                        if (hasNightShift) {
+                          shiftText = '值班'
                           shiftColor = 'text-red-600'
                         } else if (shift === 'morning') {
                           shiftText = department || '休息'
                           shiftColor = 'text-blue-600'
+                        } else if (shift === 'night') {
+                          shiftText = '值班 夜班'
+                          shiftColor = 'text-red-600'
                         } else {
                           shiftText = '休息'
                           shiftColor = 'text-gray-400'
