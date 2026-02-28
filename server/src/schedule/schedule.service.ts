@@ -279,7 +279,20 @@ export class ScheduleService {
     // 🔴 CRITICAL: 记录每个医生不能值班的剩余天数（确保至少休息2天）
     const doctorDutyBlockDays: Record<string, number> = {}
 
+    // 🔴 CRITICAL: 计算最后一个值班日期（确保至少能在倒数第3天值班，这样能休息倒数第2天和倒数第1天）
+    const lastDutyDateIndex = dates.length - 3 // 倒数第3天（索引 = dates.length - 3）
+    console.log(`🔴 最后一个值班日期索引: ${lastDutyDateIndex} (日期: ${dates[lastDutyDateIndex]})`)
+
     dates.forEach((date, index) => {
+      // 🔴 CRITICAL: 如果超过了最后一个值班日期，不安排值班
+      // 这样可以确保最后一个值班医生至少能休息2天
+      if (index > lastDutyDateIndex) {
+        console.log(`🔴 ${date} 超过了最后一个值班日期（索引 ${index} > ${lastDutyDateIndex}），不安排值班`)
+        dutySchedule[date] = '' // 不安排值班
+        doctorIndex++ // 继续递增索引，避免值班顺序被打乱
+        return
+      }
+
       // 🔴 CRITICAL: 每天开始前，减少所有医生的不能值班天数
       Object.keys(doctorDutyBlockDays).forEach(doctor => {
         if (doctorDutyBlockDays[doctor] > 0) {
@@ -484,6 +497,20 @@ export class ScheduleService {
         doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已标记为休息的医生
       )
 
+      // 🔴 CRITICAL: 检查是否有值班医生在休息日被错误包含在工作列表中
+      const dutyDoctor = dutySchedule[date]
+      if (dutyDoctor && dateIndex > 0) {
+        const prevDate = dates[dateIndex - 1]
+        const prevDutyDoctor = dutySchedule[prevDate]
+        
+        // 检查前一天值班的医生是否在今天的休息名单中，但却在工作列表中
+        if (prevDutyDoctor && todayOff.has(prevDutyDoctor)) {
+          if (doctorsWorking.includes(prevDutyDoctor)) {
+            console.log(`⚠️ 警告: ${prevDutyDoctor} 在 ${date} 应该休息（前一天值班），但仍在工作列表中！`)
+          }
+        }
+      }
+
       // 判断是否是周末（周六或周日）
       const dateObj = new Date(date)
       const dayOfWeek = dateObj.getDay()
@@ -675,19 +702,38 @@ export class ScheduleService {
 
   /**
    * 计算休息天数
+   * 🔴 CRITICAL: 修改统计逻辑，只统计最后一次值班后的休息天数
    */
   private calculateRestDays(
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[]
   ): void {
     Object.values(doctorSchedule).forEach(info => {
-      // 计算工作天数（包括白班和夜班）
-      const workDays = dates.filter(date => 
-        info.shifts[date] && info.shifts[date] !== 'off'
-      ).length
-      
-      // 休息天数 = 总天数 - 工作天数
-      info.restDays = dates.length - workDays
+      // 🔴 CRITICAL: 如果该医生有值班记录，只统计最后一次值班后的休息天数
+      const dutyDates = Object.keys(info.nightShiftsByDate).filter(date => info.nightShiftsByDate[date])
+
+      if (dutyDates.length > 0) {
+        // 找到最后一次值班的日期
+        const lastDutyDate = dutyDates[dutyDates.length - 1]
+        const lastDutyIndex = dates.indexOf(lastDutyDate)
+
+        // 统计最后一次值班后的休息天数（最多2天）
+        let restDays = 0
+        for (let i = lastDutyIndex + 1; i < Math.min(lastDutyIndex + 3, dates.length); i++) {
+          if (info.shifts[dates[i]] === 'off') {
+            restDays++
+          }
+        }
+
+        info.restDays = restDays
+      } else {
+        // 如果没有值班记录，统计总休息天数
+        const workDays = dates.filter(date =>
+          info.shifts[date] && info.shifts[date] !== 'off'
+        ).length
+
+        info.restDays = dates.length - workDays
+      }
     })
   }
 

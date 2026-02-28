@@ -110,8 +110,8 @@ const IndexPage = () => {
 
         // 如果原来是上班，减少上班天数，增加休息天数
         if (oldShift === 'morning') {
-          doctorInfo.morningShiftDays = (doctorInfo.morningShiftDays || 0) - 1
-          doctorInfo.afternoonShiftDays = (doctorInfo.afternoonShiftDays || 0) - 1
+          ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) - 1
+          ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) - 1
           doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
         }
       } else {
@@ -120,8 +120,8 @@ const IndexPage = () => {
 
         // 如果原来是休息，增加上班天数，减少休息天数
         if (oldShift === 'off' || !oldShift) {
-          doctorInfo.morningShiftDays = (doctorInfo.morningShiftDays || 0) + 1
-          doctorInfo.afternoonShiftDays = (doctorInfo.afternoonShiftDays || 0) + 1
+          ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
+          ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
           doctorInfo.restDays = (doctorInfo.restDays || 0) - 1
         }
       }
