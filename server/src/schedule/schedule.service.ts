@@ -271,6 +271,10 @@ export class ScheduleService {
     // 🔴 CRITICAL: 基于可用医生列表进行轮换，而不是 FIXED_DOCTORS
     // 避免因医生数量不一致导致的索引错误
     let doctorIndex = 0
+    if (dutyStartDoctor && availableDoctors.includes(dutyStartDoctor)) {
+      doctorIndex = availableDoctors.indexOf(dutyStartDoctor)
+      console.log(`🔴 值班起始医生设置为: ${dutyStartDoctor}, 索引: ${doctorIndex}`)
+    }
 
     // 🔴 CRITICAL: 记录每个医生不能值班的剩余天数（确保至少休息2天）
     const doctorDutyBlockDays: Record<string, number> = {}
