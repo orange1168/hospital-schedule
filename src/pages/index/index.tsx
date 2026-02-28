@@ -186,7 +186,7 @@ const IndexPage = () => {
         data: {
           startDate,
           dutyStartDoctor,
-          leaveDoctors: leaveRecords,
+          leaveRequests: leaveRecords, // 🔴 修改：使用 leaveRequests 匹配后端
           aiRequirements // 传递AI需求
         }
       })
