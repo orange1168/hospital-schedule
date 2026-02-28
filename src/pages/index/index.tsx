@@ -856,25 +856,21 @@ const IndexPage = () => {
               </View>
             </View>
             <View className="flex gap-3">
-              <View className="flex-1">
-                <Button
-                  className="w-full bg-gray-200 text-gray-700"
-                  onTap={() => {
-                    setShowCellEditModal(false)
-                    setEditingCell(null)
-                    setSelectedDepartment('')
-                  }}
-                >
-                  取消
-                </Button>
+              <View
+                className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
+                onTap={() => {
+                  setShowCellEditModal(false)
+                  setEditingCell(null)
+                  setSelectedDepartment('')
+                }}
+              >
+                <Text className="block text-sm font-medium">取消</Text>
               </View>
-              <View className="flex-1">
-                <Button
-                  className="w-full bg-blue-500 text-white"
-                  onTap={handleSaveCellEdit}
-                >
-                  确定
-                </Button>
+              <View
+                className="flex-1 bg-blue-500 text-white rounded-lg py-3 text-center cursor-pointer"
+                onTap={handleSaveCellEdit}
+              >
+                <Text className="block text-sm font-medium">确定</Text>
               </View>
             </View>
           </View>
