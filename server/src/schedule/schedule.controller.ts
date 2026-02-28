@@ -6,7 +6,7 @@ interface GenerateScheduleDto {
   startDate: string
   doctors?: string[]
   dutyStartDoctor?: string
-  leaveDoctors?: string[]
+  leaveRequests?: any[] // ✅ 修改：使用 leaveRequests 匹配前端
   aiRequirements?: string // AI排班需求
 }
 
@@ -25,7 +25,7 @@ export class ScheduleController {
   @Post('generate')
   generateSchedule(@Body() body: GenerateScheduleDto) {
     console.log('收到排班生成请求:', body)
-    const { startDate, doctors, dutyStartDoctor, leaveDoctors, aiRequirements } = body
+    const { startDate, doctors, dutyStartDoctor, leaveRequests, aiRequirements } = body
 
     if (!startDate) {
       return {
@@ -40,7 +40,7 @@ export class ScheduleController {
         startDate,
         doctors,
         dutyStartDoctor,
-        leaveDoctors,
+        leaveRequests, // ✅ 修改：使用 leaveRequests
         aiRequirements
       )
       console.log('排班生成成功:', scheduleData)

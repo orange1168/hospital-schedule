@@ -92,6 +92,7 @@ export class ScheduleService {
           leaveMap[leave.doctor] = leave.dates
         }
       })
+      console.log('请假信息:', leaveMap)
     }
 
     console.log('开始生成排班，医生列表:', doctorList)
@@ -162,11 +163,9 @@ export class ScheduleService {
 
     // 检查医生在特定日期是否请假
     const isDoctorOnLeave = (doctor: string, date: string): boolean => {
-      if (!leaveMap[doctor]) return false
-      // 如果 dates 数组为空，表示该医生一周都请假
-      if (leaveMap[doctor].length === 0) return true
-      // 检查指定日期是否在请假列表中
-      return leaveMap[doctor].includes(date)
+      const isLeave = !leaveMap[doctor] ? false : (leaveMap[doctor].length === 0 || leaveMap[doctor].includes(date))
+      console.log(`🔴检查 ${doctor} 在 ${date} 是否请假: ${isLeave}, leaveMap[${doctor}] = ${leaveMap[doctor]}`)
+      return isLeave
     }
 
     // 检查医生是否在AI约束中指定了休息日
@@ -229,6 +228,7 @@ export class ScheduleService {
     this.assignDayShifts(
       dates,
       schedule,
+      dutySchedule, // ✅ 添加 dutySchedule 参数
       restDatesMap,
       availableDoctors,
       doctorSchedule,
@@ -286,6 +286,11 @@ export class ScheduleService {
       
       while (attempts < FIXED_DOCTORS.length * 2) {
         const doctor = FIXED_DOCTORS[doctorIndex % FIXED_DOCTORS.length]
+        const isAvailable = availableDoctors.includes(doctor)
+        const isOnLeave = isDoctorOnLeave(doctor, date)
+        const isNextDayOff = nextDayOff.has(doctor)
+        
+        console.log(`🔴值班检查 ${date}: 医生=${doctor}, 可用=${isAvailable}, 请假=${isOnLeave}, 次日休息=${isNextDayOff}`)
         
         // 检查医生是否在可用医生列表中，并且没有请假或第二天需要休息
         if (
@@ -294,6 +299,7 @@ export class ScheduleService {
           !nextDayOff.has(doctor)
         ) {
           selectedDoctor = doctor
+          console.log(`🔴值班选择 ${date}: ${selectedDoctor}`)
           break
         }
         
@@ -321,8 +327,20 @@ export class ScheduleService {
       }
 
       if (!selectedDoctor) {
-        // 如果没有找到合适的医生，选择第一个可用的
-        selectedDoctor = availableDoctors[0]
+        // 如果没有找到合适的医生，在可用医生中找一个没有请假的
+        console.warn(`${date} 没有找到合适的值班医生，尝试从可用医生中选择`)
+        for (const doctor of availableDoctors) {
+          if (!isDoctorOnLeave(doctor, date)) {
+            selectedDoctor = doctor
+            console.log(`${date} 选择值班医生: ${selectedDoctor} (fallback)`)
+            break
+          }
+        }
+        
+        // 如果还是没有找到，抛出异常
+        if (!selectedDoctor) {
+          throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假）`)
+        }
       }
 
       dutySchedule[date] = selectedDoctor
@@ -351,6 +369,7 @@ export class ScheduleService {
   private assignDayShifts(
     dates: string[],
     schedule: Record<string, Record<string, ScheduleSlot[]>>,
+    dutySchedule: Record<string, string>, // ✅ 添加 dutySchedule 参数
     restDatesMap: Record<string, Set<string>>,
     availableDoctors: string[],
     doctorSchedule: Record<string, DoctorSchedule>,
@@ -441,47 +460,61 @@ export class ScheduleService {
 
       console.log(`${date} (${isWeekend ? '周末' : '工作日'}) 需要排科室数量: ${departmentsForDay.length}`)
 
-      departmentsForDay.forEach(dept => {
+      departmentsForDay.forEach((dept, deptIndex) => {
         if (doctorsWorking.length > 0) {
-          // 🔴 优先分配AI约束的医生
+          // ✅ 优先分配值班医生到第一个科室
           let bestDoctor = ''
-          let minWorkDays = Infinity
-
-          // 首先检查是否有AI约束要求某个医生必须排这个科室
-          for (const doctor of availableDoctors) {
-            const requiredDept = getRequiredDepartment(doctor, date)
-            if (requiredDept === dept && 
-                doctorsWorking.includes(doctor) &&
-                !doctorSchedule[doctor].shifts[date]) {
-              bestDoctor = doctor
-              console.log(`${date} ${dept} AI约束: ${doctor} 必须排此科室`)
-              break
-            }
+          const dutyDoctor = dutySchedule[date] // 获取当天的值班医生
+          
+          // 如果是第一个科室，且有值班医生在工作列表中，且还没排班，则优先分配
+          if (deptIndex === 0 && dutyDoctor && 
+              doctorsWorking.includes(dutyDoctor) && 
+              !doctorSchedule[dutyDoctor].shifts[date]) {
+            bestDoctor = dutyDoctor
+            console.log(`${date} ${dept} 优先分配值班医生: ${bestDoctor}`)
           }
-
-          // 如果没有AI约束，则选择工作天数最少的医生
+          
+          // 如果不是值班医生，则按照原来的逻辑分配
           if (!bestDoctor) {
-            // 找出所有工作天数最少且当天没有排班的医生
-            const candidates: string[] = []
-            for (const doctor of doctorsWorking) {
-              // 检查这个医生今天是否已经排过白班（不包括夜班）
-              const alreadyHasDayShift = doctorSchedule[doctor].shifts[date] && 
-                                         doctorSchedule[doctor].shifts[date] !== 'off'
-              
-              if (!alreadyHasDayShift) {
-                if (doctorWorkDays[doctor] < minWorkDays) {
-                  minWorkDays = doctorWorkDays[doctor]
-                  candidates.length = 0 // 清空候选列表
-                }
-                if (doctorWorkDays[doctor] === minWorkDays) {
-                  candidates.push(doctor)
-                }
+            // 🔴 优先分配AI约束的医生
+            let minWorkDays = Infinity
+
+            // 首先检查是否有AI约束要求某个医生必须排这个科室
+            for (const doctor of availableDoctors) {
+              const requiredDept = getRequiredDepartment(doctor, date)
+              if (requiredDept === dept && 
+                  doctorsWorking.includes(doctor) &&
+                  !doctorSchedule[doctor].shifts[date]) {
+                bestDoctor = doctor
+                console.log(`${date} ${dept} AI约束: ${doctor} 必须排此科室`)
+                break
               }
             }
-            
-            // 随机选择一个候选医生
-            if (candidates.length > 0) {
-              bestDoctor = candidates[Math.floor(Math.random() * candidates.length)]
+
+            // 如果没有AI约束，则选择工作天数最少的医生
+            if (!bestDoctor) {
+              // 找出所有工作天数最少且当天没有排班的医生
+              const candidates: string[] = []
+              for (const doctor of doctorsWorking) {
+                // 检查这个医生今天是否已经排过白班（不包括夜班）
+                const alreadyHasDayShift = doctorSchedule[doctor].shifts[date] && 
+                                           doctorSchedule[doctor].shifts[date] !== 'off'
+                
+                if (!alreadyHasDayShift) {
+                  if (doctorWorkDays[doctor] < minWorkDays) {
+                    minWorkDays = doctorWorkDays[doctor]
+                    candidates.length = 0 // 清空候选列表
+                  }
+                  if (doctorWorkDays[doctor] === minWorkDays) {
+                    candidates.push(doctor)
+                  }
+                }
+              }
+              
+              // 随机选择一个候选医生
+              if (candidates.length > 0) {
+                bestDoctor = candidates[Math.floor(Math.random() * candidates.length)]
+              }
             }
           }
 
