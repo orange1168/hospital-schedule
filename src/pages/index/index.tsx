@@ -79,15 +79,33 @@ const IndexPage = () => {
 
     const { doctor, date } = editingCell
     const newScheduleData = { ...scheduleData }
+    const doctorInfo = newScheduleData.doctorSchedule[doctor]
 
     // 更新医生的排班信息
-    if (newScheduleData.doctorSchedule[doctor]) {
+    if (doctorInfo) {
+      const oldShift = doctorInfo.shifts[date]
+
+      // 重新计算统计数据
       if (department === '休息') {
-        newScheduleData.doctorSchedule[doctor].shifts[date] = 'off'
-        ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = '休息'
+        doctorInfo.shifts[date] = 'off'
+        ;(doctorInfo as any).departmentsByDate[date] = '休息'
+
+        // 如果原来是上班，减少上班天数，增加休息天数
+        if (oldShift === 'morning') {
+          doctorInfo.morningShiftDays = (doctorInfo.morningShiftDays || 0) - 1
+          doctorInfo.afternoonShiftDays = (doctorInfo.afternoonShiftDays || 0) - 1
+          doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
+        }
       } else {
-        newScheduleData.doctorSchedule[doctor].shifts[date] = 'morning'
-        ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = department
+        doctorInfo.shifts[date] = 'morning'
+        ;(doctorInfo as any).departmentsByDate[date] = department
+
+        // 如果原来是休息，增加上班天数，减少休息天数
+        if (oldShift === 'off' || !oldShift) {
+          doctorInfo.morningShiftDays = (doctorInfo.morningShiftDays || 0) + 1
+          doctorInfo.afternoonShiftDays = (doctorInfo.afternoonShiftDays || 0) + 1
+          doctorInfo.restDays = (doctorInfo.restDays || 0) - 1
+        }
       }
     }
 
