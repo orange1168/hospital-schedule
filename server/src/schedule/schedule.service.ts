@@ -279,20 +279,7 @@ export class ScheduleService {
     // 🔴 CRITICAL: 记录每个医生不能值班的剩余天数（确保至少休息2天）
     const doctorDutyBlockDays: Record<string, number> = {}
 
-    // 🔴 CRITICAL: 计算最后一个值班日期（确保至少能在倒数第3天值班，这样能休息倒数第2天和倒数第1天）
-    const lastDutyDateIndex = dates.length - 3 // 倒数第3天（索引 = dates.length - 3）
-    console.log(`🔴 最后一个值班日期索引: ${lastDutyDateIndex} (日期: ${dates[lastDutyDateIndex]})`)
-
     dates.forEach((date, index) => {
-      // 🔴 CRITICAL: 如果超过了最后一个值班日期，不安排值班
-      // 这样可以确保最后一个值班医生至少能休息2天
-      if (index > lastDutyDateIndex) {
-        console.log(`🔴 ${date} 超过了最后一个值班日期（索引 ${index} > ${lastDutyDateIndex}），不安排值班`)
-        dutySchedule[date] = '' // 不安排值班
-        doctorIndex++ // 继续递增索引，避免值班顺序被打乱
-        return
-      }
-
       // 🔴 CRITICAL: 每天开始前，减少所有医生的不能值班天数
       Object.keys(doctorDutyBlockDays).forEach(doctor => {
         if (doctorDutyBlockDays[doctor] > 0) {
