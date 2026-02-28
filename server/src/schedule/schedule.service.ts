@@ -379,10 +379,24 @@ export class ScheduleService {
       doctorIndex++
     })
 
-    console.log('夜班分配完成:', dutySchedule)
-    console.log('restDatesMap:', Object.fromEntries(
-      Object.entries(restDatesMap).map(([k, v]) => [k, Array.from(v)])
-    ))
+    console.log('🔴 restDatesMap 内容:')
+    Object.entries(restDatesMap).forEach(([date, doctors]) => {
+      console.log(`  ${date}: ${Array.from(doctors).join(', ')}`)
+    })
+
+    // 🔴 CRITICAL: 验证值班医生的休息日设置
+    dates.forEach((date, index) => {
+      const dutyDoctor = dutySchedule[date]
+      if (dutyDoctor && index + 1 < dates.length) {
+        const nextDate = dates[index + 1]
+        const nextNextDate = index + 2 < dates.length ? dates[index + 2] : null
+        console.log(`🔴 ${date} 值班医生 ${dutyDoctor}，应该休息的日期: ${nextDate}${nextNextDate ? ', ' + nextNextDate : ''}`)
+        console.log(`  ${nextDate} restDatesMap: ${Array.from(restDatesMap[nextDate] || [])}`)
+        if (nextNextDate) {
+          console.log(`  ${nextNextDate} restDatesMap: ${Array.from(restDatesMap[nextNextDate] || [])}`)
+        }
+      }
+    })
   }
 
   /**
@@ -457,9 +471,10 @@ export class ScheduleService {
     dates.forEach((date, dateIndex) => {
       // 🔴 CRITICAL: 标记当天需要休息的医生
       const todayOff = restDatesMap[date] || new Set()
+      console.log(`🔴 ${date} 需要休息的医生: ${Array.from(todayOff).join(', ') || '无'}`)
       todayOff.forEach(doctor => {
         doctorSchedule[doctor].shifts[date] = 'off'
-        console.log(`${date} ${doctor} 因前一天夜班而强制休息`)
+        console.log(`  ${date} ${doctor} 设置为休息`)
       })
 
       const doctorsWorking = availableDoctors.filter(d => 
@@ -608,6 +623,15 @@ export class ScheduleService {
     })
 
     console.log('日班分配完成，各医生工作天数:', doctorWorkDays)
+
+    // 🔴 CRITICAL: 打印值班医生的排班详情
+    console.log('🔴 值班医生排班详情:')
+    dates.forEach((date, index) => {
+      const dutyDoctor = dutySchedule[date]
+      if (dutyDoctor) {
+        console.log(`  ${date} 值班: ${dutyDoctor}, shifts[${date}] = ${doctorSchedule[dutyDoctor].shifts[date]}, departmentsByDate[${date}] = ${(doctorSchedule[dutyDoctor] as any).departmentsByDate[date]}`)
+      }
+    })
   }
 
   /**
