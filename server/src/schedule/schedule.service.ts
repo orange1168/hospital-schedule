@@ -63,22 +63,24 @@ export class ScheduleService {
   /**
    * 生成排班表
    * @param startDate 开始日期（YYYY-MM-DD）
-   * @param doctors 医生列表（可选，不传则使用默认的14位医生）
+   * @param doctors 医生列表（可以是字符串数组或对象数组）
    * @param dutyStartDoctor 值班起始医生
    * @param leaveDoctors 请假医生列表（字符串数组或对象数组）
    * @param aiRequirements AI排班需求（可选）
    */
   generateSchedule(
     startDate: string,
-    doctors?: string[],
+    doctors?: string[] | { name: string; isMainDuty?: boolean }[],
     dutyStartDoctor?: string,
     leaveDoctors?: string[] | LeaveInfo[],
     aiRequirements?: string
   ): ScheduleData {
     console.log('🔥 generateSchedule 被调用，startDate:', startDate)
 
-    // 使用用户输入的医生列表，如果没有则使用默认的医生列表
-    const doctorList = doctors && doctors.length > 0 ? doctors : FIXED_DOCTORS
+    // 将医生列表转换为字符串数组
+    const doctorList = doctors && doctors.length > 0
+      ? doctors.map(d => typeof d === 'string' ? d : d.name)
+      : FIXED_DOCTORS
     
     // 将请假信息转换为统一格式：Record<doctorName, date[]>
     const leaveMap: Record<string, string[]> = {}
@@ -194,7 +196,11 @@ export class ScheduleService {
       return constraint.departments[0]
     }
 
-    // 步骤1：分配夜班
+    // 🔴 CRITICAL: 先定义 restDatesMap，让 assignNightShifts 直接更新它
+    // key: date, value: Set<doctor>
+    const restDatesMap: Record<string, Set<string>> = {}
+
+    // 步骤1：分配夜班（同时更新 restDatesMap）
     console.log('开始分配夜班...')
     this.assignNightShifts(
       dates,
@@ -203,24 +209,13 @@ export class ScheduleService {
       dutyStartDoctor,
       nextDayOff,
       doctorSchedule,
-      isDoctorOnLeave
+      isDoctorOnLeave,
+      restDatesMap // 🔴 传递 restDatesMap 参数
     )
 
-    // 🔴 CRITICAL: 在白班分配前，构建完整的休息日期映射
-    // key: date, value: Set<doctor>
-    const restDatesMap: Record<string, Set<string>> = {}
-    dates.forEach((date, index) => {
-      if (index + 1 < dates.length) {
-        const nextDate = dates[index + 1]
-        const dutyDoctor = dutySchedule[date]
-        if (dutyDoctor) {
-          if (!restDatesMap[nextDate]) {
-            restDatesMap[nextDate] = new Set()
-          }
-          restDatesMap[nextDate].add(dutyDoctor)
-          console.log(`${date} 值班医生 ${dutyDoctor}，${nextDate} 强制休息`)
-        }
-      }
+    console.log('🔴 restDatesMap 内容:')
+    Object.entries(restDatesMap).forEach(([date, doctors]) => {
+      console.log(`${date}: ${Array.from(doctors).join(', ')}`)
     })
 
     // 步骤2：分配上午和下午班次
@@ -269,7 +264,8 @@ export class ScheduleService {
     dutyStartDoctor: string | undefined,
     nextDayOff: Set<string>,
     doctorSchedule: Record<string, DoctorSchedule>,
-    isDoctorOnLeave: (doctor: string, date: string) => boolean
+    isDoctorOnLeave: (doctor: string, date: string) => boolean,
+    restDatesMap: Record<string, Set<string>> // 🔴 添加 restDatesMap 参数
   ): void {
     // 找到值班起始医生在 FIXED_DOCTORS 中的索引
     let startIndex = 0
@@ -277,32 +273,30 @@ export class ScheduleService {
       startIndex = FIXED_DOCTORS.indexOf(dutyStartDoctor)
     }
 
-    let doctorIndex = startIndex
+    // 🔴 CRITICAL: 基于可用医生列表进行轮换，而不是 FIXED_DOCTORS
+    // 避免因医生数量不一致导致的索引错误
+    let doctorIndex = 0
 
     dates.forEach((date, index) => {
       // 找到下一个可用的医生（跳过请假医生和第二天需要休息的医生）
       let attempts = 0
       let selectedDoctor = ''
-      
-      while (attempts < FIXED_DOCTORS.length * 2) {
-        const doctor = FIXED_DOCTORS[doctorIndex % FIXED_DOCTORS.length]
-        const isAvailable = availableDoctors.includes(doctor)
+
+      // 🔴 CRITICAL: 在可用医生列表中循环选择，而不是 FIXED_DOCTORS
+      while (attempts < availableDoctors.length * 2) {
+        const doctor = availableDoctors[doctorIndex % availableDoctors.length]
         const isOnLeave = isDoctorOnLeave(doctor, date)
         const isNextDayOff = nextDayOff.has(doctor)
-        
-        console.log(`🔴值班检查 ${date}: 医生=${doctor}, 可用=${isAvailable}, 请假=${isOnLeave}, 次日休息=${isNextDayOff}`)
-        
-        // 检查医生是否在可用医生列表中，并且没有请假或第二天需要休息
-        if (
-          availableDoctors.includes(doctor) &&
-          !isDoctorOnLeave(doctor, date) &&
-          !nextDayOff.has(doctor)
-        ) {
+
+        console.log(`🔴值班检查 ${date}: 医生=${doctor}, 请假=${isOnLeave}, 次日休息=${isNextDayOff}`)
+
+        // 🔴 CRITICAL: 必须排除第二天需要休息的医生
+        if (!isOnLeave && !isNextDayOff) {
           selectedDoctor = doctor
           console.log(`🔴值班选择 ${date}: ${selectedDoctor}`)
           break
         }
-        
+
         doctorIndex++
         attempts++
       }
@@ -350,17 +344,23 @@ export class ScheduleService {
       doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
-      // 🔴 CRITICAL: 标记第二天需要休息
+      // 🔴 CRITICAL: 标记第二天需要休息（添加到 restDatesMap）
       if (index + 1 < dates.length) {
-        nextDayOff.add(selectedDoctor)
-        console.log(`${date} 夜班医生 ${selectedDoctor}，${dates[index + 1]} 强制休息`)
+        const nextDate = dates[index + 1]
+        if (!restDatesMap[nextDate]) {
+          restDatesMap[nextDate] = new Set()
+        }
+        restDatesMap[nextDate].add(selectedDoctor)
+        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextDate} 强制休息`)
       }
 
       doctorIndex++
     })
 
     console.log('夜班分配完成:', dutySchedule)
-    console.log('nextDayOff:', Array.from(nextDayOff))
+    console.log('restDatesMap:', Object.fromEntries(
+      Object.entries(restDatesMap).map(([k, v]) => [k, Array.from(v)])
+    ))
   }
 
   /**

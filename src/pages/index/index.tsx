@@ -46,6 +46,82 @@ const IndexPage = () => {
   const [currentLeaveDoctor, setCurrentLeaveDoctor] = useState('')
   const [currentLeaveDates, setCurrentLeaveDates] = useState<string[]>([])
 
+  // 排班修改相关状态
+  const [showCellEditModal, setShowCellEditModal] = useState(false)
+  const [editingCell, setEditingCell] = useState<{ doctor: string; date: string } | null>(null)
+  const [selectedDepartment, setSelectedDepartment] = useState('')
+
+  // 处理单元格点击
+  const handleCellClick = (doctor: string, date: string) => {
+    const schedule = scheduleData?.doctorSchedule[doctor]
+    if (!schedule) return
+
+    const department = (schedule as any)?.departmentsByDate?.[date]
+    const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
+
+    // 值班医生不能修改
+    if (hasNightShift) {
+      Taro.showToast({
+        title: '值班医生不能修改',
+        icon: 'none'
+      })
+      return
+    }
+
+    setEditingCell({ doctor, date })
+    setSelectedDepartment(department || '休息')
+    setShowCellEditModal(true)
+  }
+
+  // 保存单元格修改
+  const handleSaveCellEdit = () => {
+    if (!editingCell || !scheduleData) return
+
+    const { doctor, date } = editingCell
+    const newScheduleData = { ...scheduleData }
+
+    // 更新医生的排班信息
+    if (newScheduleData.doctorSchedule[doctor]) {
+      if (selectedDepartment === '休息') {
+        newScheduleData.doctorSchedule[doctor].shifts[date] = 'off'
+        ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = '休息'
+      } else {
+        newScheduleData.doctorSchedule[doctor].shifts[date] = 'morning'
+        ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = selectedDepartment
+      }
+    }
+
+    // 更新科室排班表（删除旧的，添加新的）
+    Object.keys(newScheduleData.schedule[date]).forEach(dept => {
+      newScheduleData.schedule[date][dept] = newScheduleData.schedule[date][dept].filter(
+        slot => slot.doctor !== doctor || slot.shift !== 'morning' && slot.shift !== 'afternoon'
+      )
+    })
+
+    if (selectedDepartment !== '休息') {
+      newScheduleData.schedule[date][selectedDepartment].push({
+        doctor,
+        shift: 'morning',
+        department: selectedDepartment
+      })
+      newScheduleData.schedule[date][selectedDepartment].push({
+        doctor,
+        shift: 'afternoon',
+        department: selectedDepartment
+      })
+    }
+
+    setScheduleData(newScheduleData)
+    setShowCellEditModal(false)
+    setEditingCell(null)
+    setSelectedDepartment('')
+
+    Taro.showToast({
+      title: '修改成功',
+      icon: 'success'
+    })
+  }
+
   // 生成排班
   const handleGenerateSchedule = async () => {
     if (!startDate) {
@@ -664,7 +740,11 @@ const IndexPage = () => {
                         }
 
                         return (
-                          <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                          <View
+                            key={date}
+                            className={`w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center ${!hasNightShift ? 'cursor-pointer active:bg-blue-50' : ''}`}
+                            onTap={() => !hasNightShift && handleCellClick(doctor, date)}
+                          >
                             <Text className={`text-xs text-center ${shiftColor}`}>
                               {shiftText}
                             </Text>
@@ -732,6 +812,71 @@ const IndexPage = () => {
             <Text className="block text-xs text-gray-500">
               点击排班表单元格可查看详情，确认无误后点击&ldquo;下载文档&rdquo;导出Word格式
             </Text>
+          </View>
+        </View>
+      )}
+
+      {/* 科室/休息选择弹窗 */}
+      {showCellEditModal && editingCell && (
+        <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <View className="bg-white rounded-lg p-6 mx-4 w-80">
+            <Text className="block text-lg font-bold mb-4 text-center">
+              修改排班
+            </Text>
+            <View className="mb-4">
+              <Text className="block text-sm text-gray-600 mb-2">
+                医生：{editingCell.doctor}
+              </Text>
+              <Text className="block text-sm text-gray-600 mb-4">
+                日期：{editingCell.date}
+              </Text>
+              <Text className="block text-sm text-gray-600 mb-2">
+                选择科室或休息：
+              </Text>
+              <View className="flex flex-col gap-2">
+                <View
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
+                  onTap={() => setSelectedDepartment('休息')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                    休息
+                  </Text>
+                </View>
+                {scheduleData?.departments.map((dept) => (
+                  <View
+                    key={dept}
+                    className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    onTap={() => setSelectedDepartment(dept)}
+                  >
+                    <Text className={`block text-sm ${selectedDepartment === dept ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                      {dept}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            <View className="flex gap-3">
+              <View className="flex-1">
+                <Button
+                  className="w-full bg-gray-200 text-gray-700"
+                  onTap={() => {
+                    setShowCellEditModal(false)
+                    setEditingCell(null)
+                    setSelectedDepartment('')
+                  }}
+                >
+                  取消
+                </Button>
+              </View>
+              <View className="flex-1">
+                <Button
+                  className="w-full bg-blue-500 text-white"
+                  onTap={handleSaveCellEdit}
+                >
+                  确定
+                </Button>
+              </View>
+            </View>
           </View>
         </View>
       )}
