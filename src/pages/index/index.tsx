@@ -73,8 +73,8 @@ const IndexPage = () => {
     setShowCellEditModal(true)
   }
 
-  // 保存单元格修改
-  const handleSaveCellEdit = () => {
+  // 处理科室/休息选择，自动保存并关闭
+  const handleDepartmentSelect = (department: string) => {
     if (!editingCell || !scheduleData) return
 
     const { doctor, date } = editingCell
@@ -82,12 +82,12 @@ const IndexPage = () => {
 
     // 更新医生的排班信息
     if (newScheduleData.doctorSchedule[doctor]) {
-      if (selectedDepartment === '休息') {
+      if (department === '休息') {
         newScheduleData.doctorSchedule[doctor].shifts[date] = 'off'
         ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = '休息'
       } else {
         newScheduleData.doctorSchedule[doctor].shifts[date] = 'morning'
-        ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = selectedDepartment
+        ;(newScheduleData.doctorSchedule[doctor] as any).departmentsByDate[date] = department
       }
     }
 
@@ -98,16 +98,16 @@ const IndexPage = () => {
       )
     })
 
-    if (selectedDepartment !== '休息') {
-      newScheduleData.schedule[date][selectedDepartment].push({
+    if (department !== '休息') {
+      newScheduleData.schedule[date][department].push({
         doctor,
         shift: 'morning',
-        department: selectedDepartment
+        department
       })
-      newScheduleData.schedule[date][selectedDepartment].push({
+      newScheduleData.schedule[date][department].push({
         doctor,
         shift: 'afternoon',
-        department: selectedDepartment
+        department
       })
     }
 
@@ -836,7 +836,7 @@ const IndexPage = () => {
               <View className="flex flex-col gap-2">
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
-                  onTap={() => setSelectedDepartment('休息')}
+                  onTap={() => handleDepartmentSelect('休息')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
                     休息
@@ -846,7 +846,7 @@ const IndexPage = () => {
                   <View
                     key={dept}
                     className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                    onTap={() => setSelectedDepartment(dept)}
+                    onTap={() => handleDepartmentSelect(dept)}
                   >
                     <Text className={`block text-sm ${selectedDepartment === dept ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
                       {dept}
@@ -865,12 +865,6 @@ const IndexPage = () => {
                 }}
               >
                 <Text className="block text-sm font-medium">取消</Text>
-              </View>
-              <View
-                className="flex-1 bg-blue-500 text-white rounded-lg py-3 text-center cursor-pointer"
-                onTap={handleSaveCellEdit}
-              >
-                <Text className="block text-sm font-medium">确定</Text>
               </View>
             </View>
           </View>
