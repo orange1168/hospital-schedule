@@ -1,5 +1,5 @@
 import { View, Text, Button, ScrollView, Picker, Textarea } from '@tarojs/components'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
 import './index.css'
@@ -29,11 +29,27 @@ const FIXED_DOCTORS = [
 
 const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
-  
+
   const [startDate, setStartDate] = useState('')
   const [dutyStartDoctor, setDutyStartDoctor] = useState<string>('')
   const [showDutyStartPicker, setShowDutyStartPicker] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // 获取最近的周一
+  const getNearestMonday = (): string => {
+    const now = new Date()
+    const dayOfWeek = now.getDay() // 0=周日, 1=周一, ..., 6=周六
+    const daysUntilMonday = (dayOfWeek + 6) % 7 // 计算到周一的天数
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - daysUntilMonday)
+    return monday.toISOString().split('T')[0] // 返回 YYYY-MM-DD 格式
+  }
+
+  // 初始化默认值
+  useEffect(() => {
+    setStartDate(getNearestMonday())
+    setDutyStartDoctor('李茜')
+  }, [])
   
   // AI排班需求相关状态
   const [aiRequirements, setAiRequirements] = useState('')
