@@ -449,29 +449,32 @@ const IndexPage = () => {
           {/* 值班起始医生 */}
           <View className="flex flex-row items-center gap-2 mt-2">
             <Text className="block text-sm font-medium w-24">值班起始：</Text>
-            <View 
-              className="flex-1 bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200 active:bg-blue-100" 
-              onTap={(e) => {
-                e.stopPropagation()
-                handleSelectDutyStartDoctor()
-              }}
-            >
-              <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
-            </View>
+            {showDutyStartPicker ? (
+              <Picker
+                mode="selector"
+                range={FIXED_DOCTORS}
+                value={FIXED_DOCTORS.indexOf(dutyStartDoctor)}
+                onChange={handleConfirmDutyStartDoctor}
+                onCancel={() => setShowDutyStartPicker(false)}
+              >
+                <View
+                  className="flex-1 bg-blue-100 rounded-lg px-3 py-2.5 border border-blue-300"
+                >
+                  <Text className="block text-sm text-blue-700">{dutyStartDoctor || '选择中...'}</Text>
+                </View>
+              </Picker>
+            ) : (
+              <View
+                className="flex-1 bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200 active:bg-blue-100"
+                onTap={(e) => {
+                  e.stopPropagation()
+                  handleSelectDutyStartDoctor()
+                }}
+              >
+                <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
+              </View>
+            )}
           </View>
-
-          {/* 值班起始医生选择器 */}
-          {showDutyStartPicker && (
-            <Picker
-              mode="selector"
-              range={FIXED_DOCTORS}
-              value={FIXED_DOCTORS.indexOf(dutyStartDoctor)}
-              onChange={handleConfirmDutyStartDoctor}
-              onCancel={() => setShowDutyStartPicker(false)}
-            >
-              <View style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'transparent', zIndex: 9999 }}></View>
-            </Picker>
-          )}
 
           {/* AI排班需求 */}
           <View className="mt-4 bg-purple-50 rounded-lg p-3">

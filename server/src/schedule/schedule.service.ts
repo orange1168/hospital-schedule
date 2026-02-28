@@ -346,9 +346,20 @@ export class ScheduleService {
       }
 
       // 🔴 CRITICAL: 选择优先级最低的医生（值班次数最少）
+      // 如果优先级相同，按照值班起始医生的顺序选择
       selectedDoctor = availableForDuty.reduce((best, current) => {
-        if (doctorPriority[current] < doctorPriority[best]) {
+        const bestPriority = doctorPriority[best]
+        const currentPriority = doctorPriority[current]
+
+        if (currentPriority < bestPriority) {
           return current
+        } else if (currentPriority === bestPriority) {
+          // 优先级相同，按照值班起始医生的顺序选择
+          const bestIndex = (availableDoctors.indexOf(best) - doctorIndex + availableDoctors.length) % availableDoctors.length
+          const currentIndex = (availableDoctors.indexOf(current) - doctorIndex + availableDoctors.length) % availableDoctors.length
+          if (currentIndex < bestIndex) {
+            return current
+          }
         }
         return best
       })
