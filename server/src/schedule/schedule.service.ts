@@ -630,19 +630,21 @@ export class ScheduleService {
 
     // 计算上午班和下午班的天数
     Object.values(doctorSchedule).forEach(info => {
-      // 统计上午班天数
+      // 统计上午班天数（排除值班当天）
       const morningDays = new Set<string>()
       dates.forEach(date => {
-        if (info.shifts[date] === 'morning') {
+        // 🔴 CRITICAL: 值班当天不计入上午班天数
+        if (info.shifts[date] === 'morning' && !info.nightShiftsByDate[date]) {
           morningDays.add(date)
         }
       })
       info.morningShiftDays = morningDays.size
 
-      // 统计下午班天数（下午班和上午班同一天）
+      // 统计下午班天数（下午班和上午班同一天，排除值班当天）
       const afternoonDays = new Set<string>()
       dates.forEach(date => {
-        if (info.shifts[date] === 'morning') {
+        // 🔴 CRITICAL: 值班当天不计入下午班天数
+        if (info.shifts[date] === 'morning' && !info.nightShiftsByDate[date]) {
           afternoonDays.add(date)
         }
       })
@@ -702,38 +704,24 @@ export class ScheduleService {
 
   /**
    * 计算休息天数
-   * 🔴 CRITICAL: 修改统计逻辑，只统计最后一次值班后的休息天数
+   * 🔴 CRITICAL: 统计总休息天数（包括值班后的休息日和普通的休息日）
    */
   private calculateRestDays(
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[]
   ): void {
     Object.values(doctorSchedule).forEach(info => {
-      // 🔴 CRITICAL: 如果该医生有值班记录，只统计最后一次值班后的休息天数
-      const dutyDates = Object.keys(info.nightShiftsByDate).filter(date => info.nightShiftsByDate[date])
+      // 🔴 CRITICAL: 统计所有休息日的天数（shifts[date] === 'off' 或者 shifts[date] 不存在）
+      let restDays = 0
 
-      if (dutyDates.length > 0) {
-        // 找到最后一次值班的日期
-        const lastDutyDate = dutyDates[dutyDates.length - 1]
-        const lastDutyIndex = dates.indexOf(lastDutyDate)
-
-        // 统计最后一次值班后的休息天数（最多2天）
-        let restDays = 0
-        for (let i = lastDutyIndex + 1; i < Math.min(lastDutyIndex + 3, dates.length); i++) {
-          if (info.shifts[dates[i]] === 'off') {
-            restDays++
-          }
+      dates.forEach(date => {
+        // 如果 shifts[date] 不存在或者为 'off'，都算作休息
+        if (!info.shifts[date] || info.shifts[date] === 'off') {
+          restDays++
         }
+      })
 
-        info.restDays = restDays
-      } else {
-        // 如果没有值班记录，统计总休息天数
-        const workDays = dates.filter(date =>
-          info.shifts[date] && info.shifts[date] !== 'off'
-        ).length
-
-        info.restDays = dates.length - workDays
-      }
+      info.restDays = restDays
     })
   }
 
