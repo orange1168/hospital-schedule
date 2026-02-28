@@ -466,6 +466,8 @@ export class ScheduleService {
           let bestDoctor = ''
           const dutyDoctor = dutySchedule[date] // 获取当天的值班医生
           
+          console.log(`🔴 ${date} ${dept}: 值班医生=${dutyDoctor}, 是否值班医生= ${dutyDoctor ? '是' : '否'}, 科室索引=${deptIndex}`)
+          
           // 如果是第一个科室，且有值班医生在工作列表中，且还没排班，则优先分配
           if (deptIndex === 0 && dutyDoctor && 
               doctorsWorking.includes(dutyDoctor) && 
