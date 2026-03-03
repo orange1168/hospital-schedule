@@ -75,11 +75,6 @@ const IndexPage = () => {
   const [showCellEditModal, setShowCellEditModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ type: 'department' | 'doctor' | 'department_select_doctor'; key1: string; key2: string; key3?: string } | null>(null)
   const [selectedDepartment, setSelectedDepartment] = useState('')
-  const [showDoctorSelection, setShowDoctorSelection] = useState(false) // 是否显示医生选择
-  const [selectedDoctor, setSelectedDoctor] = useState('') // 选中的医生
-
-  // 平台检测
-  const isH5 = Taro.getEnv() === Taro.ENV_TYPE.WEB
 
   // 获取日期列表
   const getDates = (): string[] => {
@@ -154,10 +149,8 @@ const IndexPage = () => {
 
   // 处理单元格点击（科室排班表）
   const handleDepartmentCellClick = (date: string, department: string) => {
-    console.log('点击科室排班表:', date, department)
     setEditingCell({ type: 'department', key1: date, key2: department })
     setSelectedDepartment('未设置')
-    setShowDoctorSelection(false)
     setShowCellEditModal(true)
   }
 
@@ -180,124 +173,117 @@ const IndexPage = () => {
 
     setEditingCell({ type: 'doctor', key1: doctor, key2: date })
     setSelectedDepartment(department || '休息')
-    setShowDoctorSelection(false)
     setShowCellEditModal(true)
   }
 
   // 处理科室/休息选择
   const handleDepartmentSelect = (department: string) => {
-    console.log('选择科室:', department, 'editingCell:', editingCell)
-    if (!editingCell) return
+    if (!editingCell || !scheduleData) return
 
-    setSelectedDepartment(department)
+    const newScheduleData = { ...scheduleData }
 
     if (editingCell.type === 'department') {
+      // 修改科室排班表
       const date = editingCell.key1
       const dept = editingCell.key2
 
-      // 如果选择了科室（非休息），显示医生选择
-      if (department !== '休息') {
-        setShowDoctorSelection(true)
-        setSelectedDoctor('')
+      // 清除该科室原有排班
+      newScheduleData.schedule[date][dept] = []
+
+      // 添加新的排班
+      if (department !== '未设置' && department !== '休息') {
+        // 需要选择医生
+        setEditingCell({ type: 'department_select_doctor', key1: date, key2: dept, key3: department })
+        setShowCellEditModal(false)
+
+        // 显示医生选择弹窗
+        Taro.showActionSheet({
+          itemList: FIXED_DOCTORS,
+          success: (res) => {
+            const doctor = FIXED_DOCTORS[res.tapIndex]
+            addDepartmentAssignment(newScheduleData, date, dept, doctor)
+            setScheduleData(newScheduleData)
+            setShowCellEditModal(false)
+            setEditingCell(null)
+            setSelectedDepartment('')
+          }
+        })
         return
       } else if (department === '休息') {
         // 设置该科室为休息
-        setScheduleData(prevData => {
-          if (!prevData) return prevData
-
-          const newScheduleData = { ...prevData }
-          newScheduleData.schedule[date][dept] = []
-          return newScheduleData
-        })
-
-        setShowCellEditModal(false)
-        setEditingCell(null)
-        setSelectedDepartment('')
-
-        Taro.showToast({
-          title: '修改成功',
-          icon: 'success'
-        })
-        return
+        newScheduleData.schedule[date][dept] = []
       }
     } else if (editingCell.type === 'doctor') {
       // 修改医生排班表
       const doctor = editingCell.key1
       const date = editingCell.key2
+      const doctorInfo = newScheduleData.doctorSchedule[doctor]
+      const oldShift = doctorInfo.shifts[date]
+      const oldDepartment = (doctorInfo as any).departmentsByDate[date]
 
-      setScheduleData(prevData => {
-        if (!prevData) return prevData
+      // 更新医生的排班信息
+      if (department === '休息') {
+        doctorInfo.shifts[date] = 'off'
+        ;(doctorInfo as any).departmentsByDate[date] = '休息'
 
-        const newScheduleData = { ...prevData }
-        const doctorInfo = newScheduleData.doctorSchedule[doctor]
-        const oldShift = doctorInfo.shifts[date]
-        const oldDepartment = (doctorInfo as any).departmentsByDate[date]
-
-        // 更新医生的排班信息
-        if (department === '休息') {
-          doctorInfo.shifts[date] = 'off'
-          ;(doctorInfo as any).departmentsByDate[date] = '休息'
-
-          // 从科室排班表中移除
-          if (oldDepartment && oldDepartment !== '休息') {
-            newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
-              slot => slot.doctor !== doctor
-            )
-          }
-
-          // 更新统计数据
-          if (oldShift === 'morning') {
-            ;(doctorInfo as any).morningShiftDays = Math.max(0, ((doctorInfo as any).morningShiftDays || 0) - 1)
-            ;(doctorInfo as any).afternoonShiftDays = Math.max(0, ((doctorInfo as any).afternoonShiftDays || 0) - 1)
-            doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
-          }
-        } else {
-          doctorInfo.shifts[date] = 'morning'
-          ;(doctorInfo as any).departmentsByDate[date] = department
-
-          // 更新科室排班表
-          if (oldDepartment && oldDepartment !== '休息' && oldDepartment !== department) {
-            // 从旧科室移除
-            newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
-              slot => slot.doctor !== doctor
-            )
-          }
-
-          // 添加到新科室
-          const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor)
-          if (!existingSlot) {
-            newScheduleData.schedule[date][department].push({
-              doctor,
-              shift: 'morning',
-              department
-            })
-            newScheduleData.schedule[date][department].push({
-              doctor,
-              shift: 'afternoon',
-              department
-            })
-          }
-
-          // 更新统计数据
-          if (oldShift === 'off' || !oldShift) {
-            ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
-            ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
-            doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
-          }
+        // 从科室排班表中移除
+        if (oldDepartment && oldDepartment !== '休息') {
+          newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
+            slot => slot.doctor !== doctor
+          )
         }
 
-        return newScheduleData
-      })
+        // 更新统计数据
+        if (oldShift === 'morning') {
+          ;(doctorInfo as any).morningShiftDays = Math.max(0, ((doctorInfo as any).morningShiftDays || 0) - 1)
+          ;(doctorInfo as any).afternoonShiftDays = Math.max(0, ((doctorInfo as any).afternoonShiftDays || 0) - 1)
+          doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
+        }
+      } else {
+        doctorInfo.shifts[date] = 'morning'
+        ;(doctorInfo as any).departmentsByDate[date] = department
 
-      setShowCellEditModal(false)
-      setEditingCell(null)
-      setSelectedDepartment('')
+        // 更新科室排班表
+        if (oldDepartment && oldDepartment !== '休息' && oldDepartment !== department) {
+          // 从旧科室移除
+          newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
+            slot => slot.doctor !== doctor
+          )
+        }
 
-      Taro.showToast({
-        title: '修改成功',
-        icon: 'success'
-      })
+        // 添加到新科室
+        const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor)
+        if (!existingSlot) {
+          newScheduleData.schedule[date][department].push({
+            doctor,
+            shift: 'morning',
+            department
+          })
+          newScheduleData.schedule[date][department].push({
+            doctor,
+            shift: 'afternoon',
+            department
+          })
+        }
+
+        // 更新统计数据
+        if (oldShift === 'off' || !oldShift) {
+          ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
+          ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
+          doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
+        }
+      }
     }
+
+    setScheduleData(newScheduleData)
+    setShowCellEditModal(false)
+    setEditingCell(null)
+    setSelectedDepartment('')
+
+    Taro.showToast({
+      title: '修改成功',
+      icon: 'success'
+    })
   }
 
   // 添加科室分配
@@ -722,10 +708,7 @@ const IndexPage = () => {
               <View className="min-w-max">
                 {/* 表头 */}
                 <View className="flex flex-row">
-                  <View
-                    className="w-24 bg-blue-50 p-2 border border-gray-200 z-10"
-                    style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#eff6ff' } : {}}
-                  >
+                  <View className="w-24 bg-blue-50 p-2 border border-gray-200">
                     <Text className="block text-sm font-bold text-center">科室</Text>
                   </View>
                   {scheduleData.dates.map((date, index) => (
@@ -738,10 +721,7 @@ const IndexPage = () => {
                 {/* 表格内容 */}
                 {scheduleData.departments.map((department) => (
                   <View key={department} className="flex flex-row">
-                    <View
-                      className="w-24 bg-gray-50 p-2 border border-gray-200 z-10"
-                      style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f9fafb' } : {}}
-                    >
+                    <View className="w-24 bg-gray-50 p-2 border border-gray-200">
                       <Text className="block text-sm font-medium text-center">{department}</Text>
                     </View>
                     {scheduleData.dates.map((date) => {
@@ -791,10 +771,7 @@ const IndexPage = () => {
               <View className="min-w-max">
                 {/* 表头 */}
                 <View className="flex flex-row">
-                  <View
-                    className="w-24 bg-purple-50 p-2 border border-gray-200 z-10"
-                    style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#faf5ff' } : {}}
-                  >
+                  <View className="w-24 bg-purple-50 p-2 border border-gray-200">
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
                   {scheduleData.dates.map((date, index) => (
@@ -810,10 +787,7 @@ const IndexPage = () => {
                   const schedule = scheduleData.doctorSchedule[doctor]
                   return (
                     <View key={doctor} className="flex flex-row">
-                      <View
-                        className="w-24 bg-gray-50 p-2 border border-gray-200 z-10"
-                        style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f9fafb' } : {}}
-                      >
+                      <View className="w-24 bg-gray-50 p-2 border border-gray-200">
                         <Text className="block text-sm font-medium text-center">{doctor}</Text>
                       </View>
                       {scheduleData.dates.map((date) => {
@@ -861,12 +835,7 @@ const IndexPage = () => {
               <View className="min-w-max">
                 {scheduleData.dates.map((date, index) => (
                   <View key={date} className="flex flex-row items-center border-b border-gray-100 py-2">
-                    <Text
-                      className="block w-32 text-sm font-medium bg-white z-10"
-                      style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#ffffff' } : {}}
-                    >
-                      {scheduleData.datesWithWeek[index]}
-                    </Text>
+                    <Text className="block w-32 text-sm font-medium">{scheduleData.datesWithWeek[index]}</Text>
                     <Text className="block flex-1 text-sm text-blue-600 font-semibold">
                       {scheduleData.dutySchedule[date] || '待自动填充'}
                     </Text>
@@ -883,10 +852,7 @@ const IndexPage = () => {
               <View className="min-w-max">
                 {/* 表头 */}
                 <View className="flex flex-row">
-                  <View
-                    className="w-24 bg-green-50 p-2 border border-gray-200 z-10"
-                    style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f0fdf4' } : {}}
-                  >
+                  <View className="w-24 bg-green-50 p-2 border border-gray-200">
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
@@ -906,10 +872,7 @@ const IndexPage = () => {
                 {/* 表格内容 */}
                 {Object.values(scheduleData.doctorSchedule).map((info) => (
                   <View key={info.name} className="flex flex-row">
-                    <View
-                      className="w-24 bg-gray-50 p-2 border border-gray-200 z-10"
-                      style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f9fafb' } : {}}
-                    >
+                    <View className="w-24 bg-gray-50 p-2 border border-gray-200">
                       <Text className="block text-sm font-medium text-center">{info.name}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
@@ -960,242 +923,56 @@ const IndexPage = () => {
           </View>
         </View>
       )}
-    </ScrollView>
 
-    {/* 单元格编辑弹窗 */}
-    {showCellEditModal && editingCell && (
-      <View
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-        onTap={() => {
-          setShowCellEditModal(false)
-          setEditingCell(null)
-          setSelectedDepartment('')
-          setShowDoctorSelection(false)
-        }}
-      >
-        <View
-          className="bg-white rounded-lg p-6 mx-4 w-80"
-          onTap={(e) => e.stopPropagation()}
-        >
-          {editingCell.type === 'department' && !showDoctorSelection ? (
-            // 科室排班表：显示当前医生和操作选项
-            <>
-              <Text className="block text-lg font-bold mb-2 text-center">
-                {editingCell.key2} - {editingCell.key1}
+      {/* 科室/休息选择弹窗 */}
+      {showCellEditModal && editingCell && (
+        <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <View className="bg-white rounded-lg p-6 mx-4 w-80">
+            <Text className="block text-lg font-bold mb-4 text-center">
+              {editingCell.type === 'department' ? '设置医生' : '设置排班'}
+            </Text>
+            <View className="mb-4">
+              <Text className="block text-sm text-gray-600 mb-4">
+                选择科室或休息：
               </Text>
-              <Text className="block text-sm text-gray-500 mb-4 text-center">
-                当前排班
-              </Text>
-
-              {/* 显示当前医生 */}
-              {(() => {
-                const date = editingCell.key1
-                const dept = editingCell.key2
-                const slots = scheduleData?.schedule[date]?.[dept] || []
-
-                if (slots.length === 0) {
-                  return (
-                    <View className="mb-4 bg-gray-50 rounded-lg p-4">
-                      <Text className="block text-sm text-gray-500 text-center">
-                        未设置医生
-                      </Text>
-                    </View>
-                  )
-                }
-
-                // 提取唯一医生
-                const uniqueDoctors = [...new Set(slots.map(s => s.doctor))]
-
-                return (
-                  <View className="mb-4 bg-blue-50 rounded-lg p-4">
-                    {uniqueDoctors.map((doctor) => (
-                      <Text key={doctor} className="block text-sm text-gray-800 text-center font-medium">
-                        {doctor}
-                      </Text>
-                    ))}
-                  </View>
-                )
-              })()}
-
-              {/* 操作按钮 */}
               <View className="flex flex-col gap-2">
                 <View
-                  className="bg-green-500 text-white rounded-lg py-3 text-center cursor-pointer"
-                  onTap={() => {
-                    setShowDoctorSelection(true)
-                    setSelectedDoctor('')
-                  }}
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
+                  onTap={() => handleDepartmentSelect('休息')}
                 >
-                  <Text className="block text-sm font-medium">选择医生</Text>
+                  <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                    休息
+                  </Text>
                 </View>
-                <View
-                  className="bg-red-500 text-white rounded-lg py-3 text-center cursor-pointer"
-                  onTap={() => {
-                    const date = editingCell.key1
-                    const dept = editingCell.key2
-
-                    setScheduleData(prevData => {
-                      if (!prevData) return prevData
-
-                      const newScheduleData = { ...prevData }
-                      newScheduleData.schedule[date][dept] = []
-                      return newScheduleData
-                    })
-
-                    setShowCellEditModal(false)
-                    setEditingCell(null)
-                    setSelectedDepartment('')
-                    setShowDoctorSelection(false)
-
-                    Taro.showToast({
-                      title: '清空成功',
-                      icon: 'success'
-                    })
-                  }}
-                >
-                  <Text className="block text-sm font-medium">清空（休息）</Text>
-                </View>
-                <View
-                  className="bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
-                  onTap={() => {
-                    setShowCellEditModal(false)
-                    setEditingCell(null)
-                    setSelectedDepartment('')
-                    setShowDoctorSelection(false)
-                  }}
-                >
-                  <Text className="block text-sm font-medium">取消</Text>
-                </View>
-              </View>
-            </>
-          ) : editingCell.type === 'department' && showDoctorSelection ? (
-            // 显示医生选择
-            <>
-              <Text className="block text-lg font-bold mb-2 text-center">
-                选择医生
-              </Text>
-              <Text className="block text-sm text-gray-500 mb-4 text-center">
-                {editingCell.key2} - {editingCell.key1}
-              </Text>
-
-              <View className="mb-4 max-h-60 overflow-y-auto">
-                <View className="flex flex-col gap-2">
-                  {FIXED_DOCTORS.map((doctor) => (
-                    <View
-                      key={doctor}
-                      className={`w-full p-3 border rounded-lg text-center ${selectedDoctor === doctor ? 'bg-green-50 border-green-500' : 'border-gray-300'}`}
-                      onTap={() => setSelectedDoctor(doctor)}
-                    >
-                      <Text className={`block text-sm ${selectedDoctor === doctor ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
-                        {doctor}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-              <View className="flex gap-3">
-                <View
-                  className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
-                  onTap={() => {
-                    setShowDoctorSelection(false)
-                    setSelectedDoctor('')
-                  }}
-                >
-                  <Text className="block text-sm font-medium">返回</Text>
-                </View>
-                <View
-                  className={`flex-1 rounded-lg py-3 text-center cursor-pointer ${selectedDoctor ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-500'}`}
-                  onTap={() => {
-                    if (!selectedDoctor) {
-                      Taro.showToast({
-                        title: '请选择医生',
-                        icon: 'none'
-                      })
-                      return
-                    }
-
-                    const date = editingCell.key1
-                    const dept = editingCell.key2
-
-                    setScheduleData(prevData => {
-                      if (!prevData) return prevData
-
-                      const newScheduleData = { ...prevData }
-
-                      // 清除该科室原有排班
-                      newScheduleData.schedule[date][dept] = []
-
-                      // 添加科室分配
-                      addDepartmentAssignment(newScheduleData, date, dept, selectedDoctor)
-
-                      return newScheduleData
-                    })
-
-                    setShowCellEditModal(false)
-                    setEditingCell(null)
-                    setSelectedDepartment('')
-                    setSelectedDoctor('')
-                    setShowDoctorSelection(false)
-
-                    Taro.showToast({
-                      title: '设置成功',
-                      icon: 'success'
-                    })
-                  }}
-                >
-                  <Text className="block text-sm font-medium">确认</Text>
-                </View>
-              </View>
-            </>
-          ) : (
-            // 修改医生排班表
-            <>
-              <Text className="block text-lg font-bold mb-4 text-center">
-                设置排班
-              </Text>
-              <View className="mb-4">
-                <Text className="block text-sm text-gray-600 mb-4">
-                  选择科室或休息：
-                </Text>
-                <View className="flex flex-col gap-2">
+                {DEPARTMENTS.map((dept) => (
                   <View
-                    className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
-                    onTap={() => handleDepartmentSelect('休息')}
+                    key={dept}
+                    className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    onTap={() => handleDepartmentSelect(dept)}
                   >
-                    <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                      休息
+                    <Text className={`block text-sm ${selectedDepartment === dept ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                      {dept}
                     </Text>
                   </View>
-                  {DEPARTMENTS.map((dept) => (
-                    <View
-                      key={dept}
-                      className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                      onTap={() => handleDepartmentSelect(dept)}
-                    >
-                      <Text className={`block text-sm ${selectedDepartment === dept ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
-                        {dept}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+                ))}
               </View>
-              <View className="flex gap-3">
-                <View
-                  className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
-                  onTap={() => {
-                    setShowCellEditModal(false)
-                    setEditingCell(null)
-                    setSelectedDepartment('')
-                  }}
-                >
-                  <Text className="block text-sm font-medium">取消</Text>
-                </View>
+            </View>
+            <View className="flex gap-3">
+              <View
+                className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
+                onTap={() => {
+                  setShowCellEditModal(false)
+                  setEditingCell(null)
+                  setSelectedDepartment('')
+                }}
+              >
+                <Text className="block text-sm font-medium">取消</Text>
               </View>
-            </>
-          )}
+            </View>
+          </View>
         </View>
-      </View>
-    )}
+      )}
+    </ScrollView>
   )
 }
 
