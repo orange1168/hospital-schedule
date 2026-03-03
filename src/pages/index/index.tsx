@@ -149,9 +149,32 @@ const IndexPage = () => {
 
   // 处理单元格点击（科室排班表）
   const handleDepartmentCellClick = (date: string, department: string) => {
-    setEditingCell({ type: 'department', key1: date, key2: department })
-    setSelectedDepartment('未设置')
-    setShowCellEditModal(true)
+    // 直接显示医生选择列表
+    Taro.showActionSheet({
+      itemList: ['取消设置', ...FIXED_DOCTORS],
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          // 取消设置，清除该科室的排班
+          if (scheduleData) {
+            const newScheduleData = { ...scheduleData }
+            newScheduleData.schedule[date][department] = []
+            setScheduleData(newScheduleData)
+          }
+        } else {
+          // 选择医生
+          const doctor = FIXED_DOCTORS[res.tapIndex - 1]
+          if (scheduleData) {
+            const newScheduleData = { ...scheduleData }
+            addDepartmentAssignment(newScheduleData, date, department, doctor)
+            setScheduleData(newScheduleData)
+            Taro.showToast({
+              title: `${doctor} 已安排到 ${department}`,
+              icon: 'success'
+            })
+          }
+        }
+      }
+    })
   }
 
   // 处理单元格点击（医生排班表）
@@ -176,102 +199,76 @@ const IndexPage = () => {
     setShowCellEditModal(true)
   }
 
-  // 处理科室/休息选择
+  // 处理科室/休息选择（仅用于医生排班表）
   const handleDepartmentSelect = (department: string) => {
     if (!editingCell || !scheduleData) return
 
+    // 科室排班表现在直接选择医生，不再走这个逻辑
+    if (editingCell.type !== 'doctor') {
+      setShowCellEditModal(false)
+      setEditingCell(null)
+      return
+    }
+
     const newScheduleData = { ...scheduleData }
 
-    if (editingCell.type === 'department') {
-      // 修改科室排班表
-      const date = editingCell.key1
-      const dept = editingCell.key2
+    // 修改医生排班表
+    const doctor = editingCell.key1
+    const date = editingCell.key2
+    const doctorInfo = newScheduleData.doctorSchedule[doctor]
+    const oldShift = doctorInfo.shifts[date]
+    const oldDepartment = (doctorInfo as any).departmentsByDate[date]
 
-      // 清除该科室原有排班
-      newScheduleData.schedule[date][dept] = []
+    // 更新医生的排班信息
+    if (department === '休息') {
+      doctorInfo.shifts[date] = 'off'
+      ;(doctorInfo as any).departmentsByDate[date] = '休息'
 
-      // 添加新的排班
-      if (department !== '未设置' && department !== '休息') {
-        // 需要选择医生
-        setEditingCell({ type: 'department_select_doctor', key1: date, key2: dept, key3: department })
-        setShowCellEditModal(false)
-
-        // 显示医生选择弹窗
-        Taro.showActionSheet({
-          itemList: FIXED_DOCTORS,
-          success: (res) => {
-            const doctor = FIXED_DOCTORS[res.tapIndex]
-            addDepartmentAssignment(newScheduleData, date, dept, doctor)
-            setScheduleData(newScheduleData)
-            setShowCellEditModal(false)
-            setEditingCell(null)
-            setSelectedDepartment('')
-          }
-        })
-        return
-      } else if (department === '休息') {
-        // 设置该科室为休息
-        newScheduleData.schedule[date][dept] = []
+      // 从科室排班表中移除
+      if (oldDepartment && oldDepartment !== '休息') {
+        newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
+          slot => slot.doctor !== doctor
+        )
       }
-    } else if (editingCell.type === 'doctor') {
-      // 修改医生排班表
-      const doctor = editingCell.key1
-      const date = editingCell.key2
-      const doctorInfo = newScheduleData.doctorSchedule[doctor]
-      const oldShift = doctorInfo.shifts[date]
-      const oldDepartment = (doctorInfo as any).departmentsByDate[date]
 
-      // 更新医生的排班信息
-      if (department === '休息') {
-        doctorInfo.shifts[date] = 'off'
-        ;(doctorInfo as any).departmentsByDate[date] = '休息'
+      // 更新统计数据
+      if (oldShift === 'morning') {
+        ;(doctorInfo as any).morningShiftDays = Math.max(0, ((doctorInfo as any).morningShiftDays || 0) - 1)
+        ;(doctorInfo as any).afternoonShiftDays = Math.max(0, ((doctorInfo as any).afternoonShiftDays || 0) - 1)
+        doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
+      }
+    } else {
+      doctorInfo.shifts[date] = 'morning'
+      ;(doctorInfo as any).departmentsByDate[date] = department
 
-        // 从科室排班表中移除
-        if (oldDepartment && oldDepartment !== '休息') {
-          newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
-            slot => slot.doctor !== doctor
-          )
-        }
+      // 更新科室排班表
+      if (oldDepartment && oldDepartment !== '休息' && oldDepartment !== department) {
+        // 从旧科室移除
+        newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
+          slot => slot.doctor !== doctor
+        )
+      }
 
-        // 更新统计数据
-        if (oldShift === 'morning') {
-          ;(doctorInfo as any).morningShiftDays = Math.max(0, ((doctorInfo as any).morningShiftDays || 0) - 1)
-          ;(doctorInfo as any).afternoonShiftDays = Math.max(0, ((doctorInfo as any).afternoonShiftDays || 0) - 1)
-          doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
-        }
-      } else {
-        doctorInfo.shifts[date] = 'morning'
-        ;(doctorInfo as any).departmentsByDate[date] = department
+      // 添加到新科室
+      const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor)
+      if (!existingSlot) {
+        newScheduleData.schedule[date][department].push({
+          doctor,
+          shift: 'morning',
+          department
+        })
+        newScheduleData.schedule[date][department].push({
+          doctor,
+          shift: 'afternoon',
+          department
+        })
+      }
 
-        // 更新科室排班表
-        if (oldDepartment && oldDepartment !== '休息' && oldDepartment !== department) {
-          // 从旧科室移除
-          newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
-            slot => slot.doctor !== doctor
-          )
-        }
-
-        // 添加到新科室
-        const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor)
-        if (!existingSlot) {
-          newScheduleData.schedule[date][department].push({
-            doctor,
-            shift: 'morning',
-            department
-          })
-          newScheduleData.schedule[date][department].push({
-            doctor,
-            shift: 'afternoon',
-            department
-          })
-        }
-
-        // 更新统计数据
-        if (oldShift === 'off' || !oldShift) {
-          ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
-          ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
-          doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
-        }
+      // 更新统计数据
+      if (oldShift === 'off' || !oldShift) {
+        ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
+        ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
+        doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
       }
     }
 
@@ -924,12 +921,12 @@ const IndexPage = () => {
         </View>
       )}
 
-      {/* 科室/休息选择弹窗 */}
-      {showCellEditModal && editingCell && (
+      {/* 科室/休息选择弹窗（仅用于医生排班表） */}
+      {showCellEditModal && editingCell && editingCell.type === 'doctor' && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <View className="bg-white rounded-lg p-6 mx-4 w-80">
             <Text className="block text-lg font-bold mb-4 text-center">
-              {editingCell.type === 'department' ? '设置医生' : '设置排班'}
+              设置排班
             </Text>
             <View className="mb-4">
               <Text className="block text-sm text-gray-600 mb-4">
