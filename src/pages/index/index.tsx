@@ -55,11 +55,15 @@ const IndexPage = () => {
   useEffect(() => {
     setStartDate(getNextMonday())
     setDutyStartDoctor('李茜')
-
-    // 初始化空排班数据结构
-    initializeEmptySchedule()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 当 startDate 改变时，初始化空排班数据结构
+  useEffect(() => {
+    if (startDate) {
+      initializeEmptySchedule()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate])
 
   // 请假相关状态
   const [showLeaveSelector, setShowLeaveSelector] = useState(false)
@@ -691,24 +695,6 @@ const IndexPage = () => {
               </View>
             )}
           </View>
-
-          {/* 操作按钮 */}
-          <View className="flex flex-row gap-2 mt-2">
-            <Button
-              className="flex-1 bg-blue-500 text-white rounded-lg py-3"
-              onClick={handleAutoFillSchedule}
-              disabled={loading}
-            >
-              {loading ? '填充中...' : '自动填充'}
-            </Button>
-            <Button
-              className="flex-1 bg-green-500 text-white rounded-lg py-3"
-              onTap={handleDownloadDoc}
-              disabled={!scheduleData}
-            >
-              下载文档
-            </Button>
-          </View>
         </View>
       </View>
 
@@ -907,6 +893,24 @@ const IndexPage = () => {
                 ))}
               </View>
             </ScrollView>
+          </View>
+
+          {/* 操作按钮 */}
+          <View className="flex flex-row gap-2 mt-6 mb-4">
+            <Button
+              className="flex-1 bg-blue-500 text-white rounded-lg py-3"
+              onClick={handleAutoFillSchedule}
+              disabled={loading}
+            >
+              {loading ? '填充中...' : '自动填充'}
+            </Button>
+            <Button
+              className="flex-1 bg-green-500 text-white rounded-lg py-3"
+              onTap={handleDownloadDoc}
+              disabled={!scheduleData}
+            >
+              下载文档
+            </Button>
           </View>
 
           <View className="mt-4 mb-20 text-center">
