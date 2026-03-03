@@ -507,61 +507,68 @@ export class ScheduleService {
 
       departmentsForDay.forEach((dept, deptIndex) => {
         if (doctorsWorking.length > 0) {
-          // ✅ 优先分配值班医生到第一个科室
+          // 🔴 CRITICAL: 强制检查AI约束 - 如果某个科室被AI约束要求必须由某个医生排班，则优先分配
+          let aiRequiredDoctor = ''
+          for (const doctor of availableDoctors) {
+            const requiredDept = getRequiredDepartment(doctor, date)
+            if (requiredDept === dept) {
+              aiRequiredDoctor = doctor
+              console.log(`🔴 ${date} ${dept} AI约束: ${doctor} 必须排此科室`)
+
+              // 检查该医生是否在工作列表中
+              if (!doctorsWorking.includes(aiRequiredDoctor)) {
+                console.warn(`⚠️ ${date} ${dept} AI约束医生 ${aiRequiredDoctor} 不在工作列表中（可能请假或休息），无法满足约束`)
+              }
+              // 检查该医生今天是否已经排过班
+              else if (doctorSchedule[aiRequiredDoctor].shifts[date]) {
+                console.warn(`⚠️ ${date} ${dept} AI约束医生 ${aiRequiredDoctor} 今天已排班，无法满足约束`)
+              }
+
+              break
+            }
+          }
+
+          // ✅ 优先分配值班医生到第一个科室（如果AI约束不冲突）
           let bestDoctor = ''
           const dutyDoctor = dutySchedule[date] // 获取当天的值班医生
-          
-          console.log(`🔴 ${date} ${dept}: 值班医生=${dutyDoctor}, 是否值班医生= ${dutyDoctor ? '是' : '否'}, 科室索引=${deptIndex}`)
-          
-          // 如果是第一个科室，且有值班医生在工作列表中，且还没排班，则优先分配
-          if (deptIndex === 0 && dutyDoctor && 
-              doctorsWorking.includes(dutyDoctor) && 
+
+          console.log(`🔴 ${date} ${dept}: 值班医生=${dutyDoctor}, AI约束医生=${aiRequiredDoctor || '无'}, 科室索引=${deptIndex}`)
+
+          // 优先级1: AI约束的医生
+          if (aiRequiredDoctor && doctorsWorking.includes(aiRequiredDoctor) && !doctorSchedule[aiRequiredDoctor].shifts[date]) {
+            bestDoctor = aiRequiredDoctor
+            console.log(`${date} ${dept} 强制分配AI约束医生: ${bestDoctor}`)
+          }
+          // 优先级2: 值班医生（仅限第一个科室）
+          else if (deptIndex === 0 && dutyDoctor &&
+              doctorsWorking.includes(dutyDoctor) &&
               !doctorSchedule[dutyDoctor].shifts[date]) {
             bestDoctor = dutyDoctor
             console.log(`${date} ${dept} 优先分配值班医生: ${bestDoctor}`)
           }
-          
-          // 如果不是值班医生，则按照原来的逻辑分配
-          if (!bestDoctor) {
-            // 🔴 优先分配AI约束的医生
+          // 优先级3: 选择工作天数最少的医生
+          else {
             let minWorkDays = Infinity
+            const candidates: string[] = []
+            for (const doctor of doctorsWorking) {
+              // 检查这个医生今天是否已经排过白班（不包括夜班）
+              const alreadyHasDayShift = doctorSchedule[doctor].shifts[date] &&
+                                           doctorSchedule[doctor].shifts[date] !== 'off'
 
-            // 首先检查是否有AI约束要求某个医生必须排这个科室
-            for (const doctor of availableDoctors) {
-              const requiredDept = getRequiredDepartment(doctor, date)
-              if (requiredDept === dept && 
-                  doctorsWorking.includes(doctor) &&
-                  !doctorSchedule[doctor].shifts[date]) {
-                bestDoctor = doctor
-                console.log(`${date} ${dept} AI约束: ${doctor} 必须排此科室`)
-                break
+              if (!alreadyHasDayShift) {
+                if (doctorWorkDays[doctor] < minWorkDays) {
+                  minWorkDays = doctorWorkDays[doctor]
+                  candidates.length = 0 // 清空候选列表
+                }
+                if (doctorWorkDays[doctor] === minWorkDays) {
+                  candidates.push(doctor)
+                }
               }
             }
 
-            // 如果没有AI约束，则选择工作天数最少的医生
-            if (!bestDoctor) {
-              // 找出所有工作天数最少且当天没有排班的医生
-              const candidates: string[] = []
-              for (const doctor of doctorsWorking) {
-                // 检查这个医生今天是否已经排过白班（不包括夜班）
-                const alreadyHasDayShift = doctorSchedule[doctor].shifts[date] && 
-                                           doctorSchedule[doctor].shifts[date] !== 'off'
-                
-                if (!alreadyHasDayShift) {
-                  if (doctorWorkDays[doctor] < minWorkDays) {
-                    minWorkDays = doctorWorkDays[doctor]
-                    candidates.length = 0 // 清空候选列表
-                  }
-                  if (doctorWorkDays[doctor] === minWorkDays) {
-                    candidates.push(doctor)
-                  }
-                }
-              }
-              
-              // 随机选择一个候选医生
-              if (candidates.length > 0) {
-                bestDoctor = candidates[Math.floor(Math.random() * candidates.length)]
-              }
+            // 随机选择一个候选医生
+            if (candidates.length > 0) {
+              bestDoctor = candidates[Math.floor(Math.random() * candidates.length)]
             }
           }
 
@@ -572,7 +579,7 @@ export class ScheduleService {
               shift: 'morning',
               department: dept
             })
-            
+
             schedule[date][dept].push({
               doctor: bestDoctor,
               shift: 'afternoon',
@@ -1006,43 +1013,43 @@ export class ScheduleService {
 
     lines.forEach(line => {
       const trimmedLine = line.trim()
-      
+
       // 解析"医生必须每天在科室"的规则
       const mustEveryDayInDeptMatch = trimmedLine.match(/(.+?)必须每天(在)?(.+?诊室)/)
       if (mustEveryDayInDeptMatch) {
         const doctor = mustEveryDayInDeptMatch[1].trim()
         const department = mustEveryDayInDeptMatch[3].trim()
-        
-        console.log(`解析到AI约束: ${doctor} 必须每天在 ${department}`)
-        
-        if (!result.doctorConstraints[doctor]) {
-          result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
-        }
-        result.doctorConstraints[doctor].departments.push(department)
-      }
 
-      // 解析"医生必须在科室"的规则
-      const mustInDeptMatch = trimmedLine.match(/(.+?)必须(在)?(.+?诊室)/)
-      if (mustInDeptMatch && !trimmedLine.includes('每天')) {
-        const doctor = mustInDeptMatch[1].trim()
-        const department = mustInDeptMatch[3].trim()
-        
-        console.log(`解析到AI约束: ${doctor} 必须在 ${department}`)
-        
+        console.log(`解析到AI约束: ${doctor} 必须每天在 ${department}`)
+
         if (!result.doctorConstraints[doctor]) {
           result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
         }
         result.doctorConstraints[doctor].departments.push(department)
+      } else {
+        // 解析"医生必须在科室"的规则（不包含"每天"）
+        const mustInDeptMatch = trimmedLine.match(/^(.+?)必须(在)?(.+?诊室)$/)
+        if (mustInDeptMatch) {
+          const doctor = mustInDeptMatch[1].trim()
+          const department = mustInDeptMatch[3].trim()
+
+          console.log(`解析到AI约束: ${doctor} 必须在 ${department}`)
+
+          if (!result.doctorConstraints[doctor]) {
+            result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
+          }
+          result.doctorConstraints[doctor].departments.push(department)
+        }
       }
 
       // 解析"医生某天休息"的规则
-      const restDayMatch = trimmedLine.match(/(.+?)(周一|周二|周三|周四|周五|周六|周日)休息/)
+      const restDayMatch = trimmedLine.match(/^(.+?)(周一|周二|周三|周四|周五|周六|周日)休息$/)
       if (restDayMatch) {
         const doctor = restDayMatch[1].trim()
         const dayOfWeek = restDayMatch[2].trim()
-        
+
         console.log(`解析到AI约束: ${doctor} ${dayOfWeek} 休息`)
-        
+
         if (!result.doctorConstraints[doctor]) {
           result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
         }
