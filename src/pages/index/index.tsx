@@ -45,18 +45,20 @@ const IndexPage = () => {
   const getNextMonday = (): string => {
     const now = new Date()
     const dayOfWeek = now.getDay() // 0=周日, 1=周一, ..., 6=周六
-    // 计算到下周一的天数
-    // 周日(0) -> 1天，周一(1) -> 7天，周二(2) -> 6天，...，周六(6) -> 2天
     const daysUntilNextMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek)
     const nextMonday = new Date(now)
     nextMonday.setDate(now.getDate() + daysUntilNextMonday)
-    return nextMonday.toISOString().split('T')[0] // 返回 YYYY-MM-DD 格式
+    return nextMonday.toISOString().split('T')[0]
   }
 
   // 初始化默认值
   useEffect(() => {
     setStartDate(getNextMonday())
     setDutyStartDoctor('李茜')
+
+    // 初始化空排班数据结构
+    initializeEmptySchedule()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 请假相关状态
@@ -65,17 +67,91 @@ const IndexPage = () => {
   const [currentLeaveDoctor, setCurrentLeaveDoctor] = useState('')
   const [currentLeaveDates, setCurrentLeaveDates] = useState<string[]>([])
 
-  // 固定排班相关状态
-  const [showFixedSchedule, setShowFixedSchedule] = useState(false)
-  const [fixedSchedule, setFixedSchedule] = useState<Record<string, Record<string, string>>>({})
-
   // 排班修改相关状态
   const [showCellEditModal, setShowCellEditModal] = useState(false)
-  const [editingCell, setEditingCell] = useState<{ doctor: string; date: string } | null>(null)
+  const [editingCell, setEditingCell] = useState<{ type: 'department' | 'doctor' | 'department_select_doctor'; key1: string; key2: string; key3?: string } | null>(null)
   const [selectedDepartment, setSelectedDepartment] = useState('')
 
-  // 处理单元格点击
-  const handleCellClick = (doctor: string, date: string) => {
+  // 获取日期列表
+  const getDates = (): string[] => {
+    if (!startDate) return []
+    const dates: string[] = []
+    const start = new Date(startDate)
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(start)
+      date.setDate(start.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+    return dates
+  }
+
+  // 获取日期和星期
+  const getDateWithWeek = (date: string): string => {
+    const dateObj = new Date(date)
+    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const dayOfWeek = dateObj.getDay()
+    return `${date.split('-')[1]}-${date.split('-')[2]} ${dayNames[dayOfWeek]}`
+  }
+
+  // 初始化空排班数据结构
+  const initializeEmptySchedule = () => {
+    if (!startDate) return
+
+    const dates = getDates()
+    const datesWithWeek = dates.map(date => getDateWithWeek(date))
+
+    // 初始化排班表结构
+    const schedule: Record<string, Record<string, Array<{ doctor: string; shift: 'morning' | 'afternoon' | 'night' | 'off'; department?: string }>>> = {}
+    dates.forEach(date => {
+      schedule[date] = {}
+      DEPARTMENTS.forEach(dept => {
+        schedule[date][dept] = []
+      })
+    })
+
+    const dutySchedule: Record<string, string> = {}
+
+    // 初始化医生排班记录
+    const doctorSchedule: Record<string, any> = {}
+    FIXED_DOCTORS.forEach(doctor => {
+      doctorSchedule[doctor] = {
+        name: doctor,
+        shifts: {},
+        nightShiftsByDate: {},
+        departmentsByDate: {},
+        morningShifts: [],
+        afternoonShifts: [],
+        morningShiftDays: 0,
+        afternoonShiftDays: 0,
+        nightShifts: 0,
+        restDays: 0
+      }
+      dates.forEach(date => {
+        doctorSchedule[doctor].shifts[date] = 'off'
+        doctorSchedule[doctor].departmentsByDate[date] = '休息'
+      })
+    })
+
+    setScheduleData({
+      dates,
+      datesWithWeek,
+      departments: DEPARTMENTS,
+      schedule,
+      dutySchedule,
+      doctorSchedule,
+      useHalfDay: false
+    })
+  }
+
+  // 处理单元格点击（科室排班表）
+  const handleDepartmentCellClick = (date: string, department: string) => {
+    setEditingCell({ type: 'department', key1: date, key2: department })
+    setSelectedDepartment('未设置')
+    setShowCellEditModal(true)
+  }
+
+  // 处理单元格点击（医生排班表）
+  const handleDoctorCellClick = (doctor: string, date: string) => {
     const schedule = scheduleData?.doctorSchedule[doctor]
     if (!schedule) return
 
@@ -91,65 +167,108 @@ const IndexPage = () => {
       return
     }
 
-    setEditingCell({ doctor, date })
+    setEditingCell({ type: 'doctor', key1: doctor, key2: date })
     setSelectedDepartment(department || '休息')
     setShowCellEditModal(true)
   }
 
-  // 处理科室/休息选择，自动保存并关闭
+  // 处理科室/休息选择
   const handleDepartmentSelect = (department: string) => {
     if (!editingCell || !scheduleData) return
 
-    const { doctor, date } = editingCell
     const newScheduleData = { ...scheduleData }
-    const doctorInfo = newScheduleData.doctorSchedule[doctor]
 
-    // 更新医生的排班信息
-    if (doctorInfo) {
+    if (editingCell.type === 'department') {
+      // 修改科室排班表
+      const date = editingCell.key1
+      const dept = editingCell.key2
+
+      // 清除该科室原有排班
+      newScheduleData.schedule[date][dept] = []
+
+      // 添加新的排班
+      if (department !== '未设置' && department !== '休息') {
+        // 需要选择医生
+        setEditingCell({ type: 'department_select_doctor', key1: date, key2: dept, key3: department })
+        setShowCellEditModal(false)
+
+        // 显示医生选择弹窗
+        Taro.showActionSheet({
+          itemList: FIXED_DOCTORS,
+          success: (res) => {
+            const doctor = FIXED_DOCTORS[res.tapIndex]
+            addDepartmentAssignment(newScheduleData, date, dept, doctor)
+            setScheduleData(newScheduleData)
+            setShowCellEditModal(false)
+            setEditingCell(null)
+            setSelectedDepartment('')
+          }
+        })
+        return
+      } else if (department === '休息') {
+        // 设置该科室为休息
+        newScheduleData.schedule[date][dept] = []
+      }
+    } else if (editingCell.type === 'doctor') {
+      // 修改医生排班表
+      const doctor = editingCell.key1
+      const date = editingCell.key2
+      const doctorInfo = newScheduleData.doctorSchedule[doctor]
       const oldShift = doctorInfo.shifts[date]
+      const oldDepartment = (doctorInfo as any).departmentsByDate[date]
 
-      // 重新计算统计数据
+      // 更新医生的排班信息
       if (department === '休息') {
         doctorInfo.shifts[date] = 'off'
         ;(doctorInfo as any).departmentsByDate[date] = '休息'
 
-        // 如果原来是上班，减少上班天数，增加休息天数
+        // 从科室排班表中移除
+        if (oldDepartment && oldDepartment !== '休息') {
+          newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
+            slot => slot.doctor !== doctor
+          )
+        }
+
+        // 更新统计数据
         if (oldShift === 'morning') {
-          ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) - 1
-          ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) - 1
+          ;(doctorInfo as any).morningShiftDays = Math.max(0, ((doctorInfo as any).morningShiftDays || 0) - 1)
+          ;(doctorInfo as any).afternoonShiftDays = Math.max(0, ((doctorInfo as any).afternoonShiftDays || 0) - 1)
           doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
         }
       } else {
         doctorInfo.shifts[date] = 'morning'
         ;(doctorInfo as any).departmentsByDate[date] = department
 
-        // 如果原来是休息，增加上班天数，减少休息天数
+        // 更新科室排班表
+        if (oldDepartment && oldDepartment !== '休息' && oldDepartment !== department) {
+          // 从旧科室移除
+          newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
+            slot => slot.doctor !== doctor
+          )
+        }
+
+        // 添加到新科室
+        const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor)
+        if (!existingSlot) {
+          newScheduleData.schedule[date][department].push({
+            doctor,
+            shift: 'morning',
+            department
+          })
+          newScheduleData.schedule[date][department].push({
+            doctor,
+            shift: 'afternoon',
+            department
+          })
+        }
+
+        // 更新统计数据
         if (oldShift === 'off' || !oldShift) {
           ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
           ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
-          doctorInfo.restDays = (doctorInfo.restDays || 0) - 1
+          doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
         }
       }
-    }
-
-    // 更新科室排班表（删除旧的，添加新的）
-    Object.keys(newScheduleData.schedule[date]).forEach(dept => {
-      newScheduleData.schedule[date][dept] = newScheduleData.schedule[date][dept].filter(
-        slot => slot.doctor !== doctor || slot.shift !== 'morning' && slot.shift !== 'afternoon'
-      )
-    })
-
-    if (department !== '休息') {
-      newScheduleData.schedule[date][department].push({
-        doctor,
-        shift: 'morning',
-        department
-      })
-      newScheduleData.schedule[date][department].push({
-        doctor,
-        shift: 'afternoon',
-        department
-      })
     }
 
     setScheduleData(newScheduleData)
@@ -163,8 +282,42 @@ const IndexPage = () => {
     })
   }
 
-  // 生成排班
-  const handleGenerateSchedule = async () => {
+  // 添加科室分配
+  const addDepartmentAssignment = (data: ScheduleData, date: string, dept: string, doctor: string) => {
+    // 清除该医生当天的其他科室排班
+    Object.keys(data.schedule[date]).forEach(d => {
+      data.schedule[date][d] = data.schedule[date][d].filter(slot => slot.doctor !== doctor)
+    })
+
+    // 添加到新科室
+    data.schedule[date][dept].push({
+      doctor,
+      shift: 'morning',
+      department: dept
+    })
+    data.schedule[date][dept].push({
+      doctor,
+      shift: 'afternoon',
+      department: dept
+    })
+
+    // 更新医生排班信息
+    const doctorInfo = data.doctorSchedule[doctor]
+    const oldShift = doctorInfo.shifts[date]
+
+    doctorInfo.shifts[date] = 'morning'
+    ;(doctorInfo as any).departmentsByDate[date] = dept
+
+    // 更新统计数据
+    if (oldShift === 'off' || !oldShift) {
+      ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
+      ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
+      doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
+    }
+  }
+
+  // 自动填充排班
+  const handleAutoFillSchedule = async () => {
     if (!startDate) {
       Taro.showToast({
         title: '请选择开始日期',
@@ -181,10 +334,34 @@ const IndexPage = () => {
       return
     }
 
+    if (!scheduleData) {
+      Taro.showToast({
+        title: '请先初始化排班表',
+        icon: 'none'
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
-      console.log('开始生成排班，参数:', { startDate, dutyStartDoctor, leaveRecords, fixedSchedule })
+      console.log('开始自动填充排班，参数:', { startDate, dutyStartDoctor, leaveRecords, scheduleData })
+
+      // 将当前的固定排班转换为后端需要的格式
+      const fixedSchedule: Record<string, Record<string, string>> = {}
+      Object.entries(scheduleData.schedule).forEach(([date, deptSchedule]) => {
+        Object.entries(deptSchedule).forEach(([dept, slots]) => {
+          slots.forEach(slot => {
+            if (slot.shift === 'morning' || slot.shift === 'afternoon') {
+              if (!fixedSchedule[date]) {
+                fixedSchedule[date] = {}
+              }
+              fixedSchedule[date][slot.doctor] = dept
+            }
+          })
+        })
+      })
+
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
@@ -200,19 +377,19 @@ const IndexPage = () => {
       if (res.data.code === 200) {
         setScheduleData(res.data.data)
         Taro.showToast({
-          title: '排班生成成功',
+          title: '自动填充成功',
           icon: 'success'
         })
       } else {
         Taro.showToast({
-          title: res.data.msg || '排班生成失败',
+          title: res.data.msg || '自动填充失败',
           icon: 'none'
         })
       }
     } catch (error) {
-      console.error('排班生成失败:', error)
+      console.error('自动填充失败:', error)
       Taro.showToast({
-        title: error?.message || '排班生成失败',
+        title: error?.message || '自动填充失败',
         icon: 'none'
       })
     } finally {
@@ -224,7 +401,7 @@ const IndexPage = () => {
   const handleDownloadDoc = async () => {
     if (!scheduleData) {
       Taro.showToast({
-        title: '请先生成排班',
+        title: '请先设置排班',
         icon: 'none'
       })
       return
@@ -326,39 +503,6 @@ const IndexPage = () => {
     setLeaveRecords(leaveRecords.filter((_, i) => i !== index))
   }
 
-  // 清空固定排班
-  const handleClearFixedSchedule = () => {
-    setFixedSchedule({})
-    Taro.showToast({
-      title: '固定排班已清空',
-      icon: 'success'
-    })
-  }
-
-  // 获取日期列表
-  const getDates = (): string[] => {
-    if (!startDate) return []
-    const dates: string[] = []
-    const start = new Date(startDate)
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(start)
-      date.setDate(start.getDate() + i)
-      dates.push(date.toISOString().split('T')[0])
-    }
-
-    return dates
-  }
-
-  // 获取日期和星期
-  const getDateWithWeek = (date: string): string => {
-    const dateObj = new Date(date)
-    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-    const dayOfWeek = dateObj.getDay()
-
-    return `${date.split('-')[1]}-${date.split('-')[2]} ${dayNames[dayOfWeek]}`
-  }
-
   return (
     <ScrollView scrollY className="h-screen bg-gray-50">
       <View className="bg-white p-4 mb-4 shadow-sm">
@@ -372,7 +516,11 @@ const IndexPage = () => {
               <Picker
                 mode="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.detail.value)}
+                onChange={(e) => {
+                  setStartDate(e.detail.value)
+                  // 日期改变时重新初始化空排班
+                  setTimeout(() => initializeEmptySchedule(), 100)
+                }}
               >
                 <Text className="block text-sm">{startDate || '请选择日期'}</Text>
               </Picker>
@@ -427,99 +575,6 @@ const IndexPage = () => {
                 }}
               >
                 <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* 固定排班设置 */}
-          <View className="mt-4 bg-blue-50 rounded-lg p-3">
-            <View className="flex flex-row items-center justify-between mb-2">
-              <Text className="block text-sm font-medium">固定排班设置：</Text>
-              <View className="flex flex-row gap-2">
-                {Object.keys(fixedSchedule).length > 0 && (
-                  <Button
-                    className="px-3 py-1 bg-red-500 text-white rounded text-xs"
-                    onTap={handleClearFixedSchedule}
-                  >
-                    清空
-                  </Button>
-                )}
-                <Button
-                  className="px-3 py-1 bg-blue-500 text-white rounded text-xs"
-                  onTap={() => setShowFixedSchedule(!showFixedSchedule)}
-                >
-                  {showFixedSchedule ? '隐藏' : '设置'}
-                </Button>
-              </View>
-            </View>
-
-            {showFixedSchedule && (
-              <View className="flex flex-col gap-2">
-                <Text className="block text-xs text-gray-600">
-                  手动设置固定排班，系统将基于您的设置自动填充剩余班次
-                </Text>
-
-                {/* 显示日期列表，每个日期下显示医生选择器 */}
-                {startDate && (
-                  <View className="mt-2">
-                    {getDates().map((dateStr) => {
-                      const displayDate = getDateWithWeek(dateStr)
-                      return (
-                        <View key={dateStr} className="bg-white rounded-lg p-3 mb-2">
-                          <Text className="block text-sm font-medium mb-2">{displayDate}</Text>
-                          <View className="flex flex-col gap-2">
-                            {FIXED_DOCTORS.map((doctor) => {
-                              const fixedValue = fixedSchedule[dateStr]?.[doctor]
-                              return (
-                                <View key={`${dateStr}-${doctor}`} className="flex flex-row items-center gap-2">
-                                  <Text className="block text-xs w-16">{doctor}</Text>
-                                  <View className="flex-1">
-                                    <Picker
-                                      mode="selector"
-                                      range={['未设置', ...['休息', ...DEPARTMENTS]]}
-                                      value={fixedValue ? (fixedValue === '休息' ? 1 : ['休息', ...DEPARTMENTS].indexOf(fixedValue) + 1) : 0}
-                                      onChange={(e) => {
-                                        const index = Number(e.detail.value)
-                                        if (index === 0) {
-                                          // 未设置，删除
-                                          setFixedSchedule(prev => {
-                                            const newSchedule = { ...prev }
-                                            if (newSchedule[dateStr]?.[doctor]) {
-                                              delete newSchedule[dateStr][doctor]
-                                              if (Object.keys(newSchedule[dateStr]).length === 0) {
-                                                delete newSchedule[dateStr]
-                                              }
-                                            }
-                                            return newSchedule
-                                          })
-                                        } else {
-                                          const value = ['未设置', ...['休息', ...DEPARTMENTS]][index]
-                                          setFixedSchedule(prev => ({
-                                            ...prev,
-                                            [dateStr]: {
-                                              ...prev[dateStr],
-                                              [doctor]: value
-                                            }
-                                          }))
-                                        }
-                                      }}
-                                    >
-                                      <View className={`bg-gray-50 rounded px-3 py-2 ${fixedValue ? (fixedValue === '休息' ? 'bg-red-50' : 'bg-green-50') : ''}`}>
-                                        <Text className={`block text-xs ${fixedValue ? (fixedValue === '休息' ? 'text-red-600' : 'text-green-600') : ''}`}>
-                                          {fixedValue || '点击设置'}
-                                        </Text>
-                                      </View>
-                                    </Picker>
-                                  </View>
-                                </View>
-                              )
-                            })}
-                          </View>
-                        </View>
-                      )
-                    })}
-                  </View>
-                )}
               </View>
             )}
           </View>
@@ -641,10 +696,10 @@ const IndexPage = () => {
           <View className="flex flex-row gap-2 mt-2">
             <Button
               className="flex-1 bg-blue-500 text-white rounded-lg py-3"
-              onClick={handleGenerateSchedule}
+              onClick={handleAutoFillSchedule}
               disabled={loading}
             >
-              {loading ? '生成中...' : '生成排班'}
+              {loading ? '填充中...' : '自动填充'}
             </Button>
             <Button
               className="flex-1 bg-green-500 text-white rounded-lg py-3"
@@ -661,27 +716,8 @@ const IndexPage = () => {
         <View className="p-4">
           {/* 科室排班表 */}
           <Text className="block text-lg font-bold mb-3">科室排班表</Text>
-
-          {/* 值班表 */}
-          <View className="bg-white rounded-lg p-4 mb-4 shadow-sm">
-            <Text className="block text-base font-bold mb-3">夜间值班</Text>
-            <ScrollView scrollX className="w-full overflow-x-auto">
-              <View className="min-w-max">
-                {scheduleData.dates.map((date, index) => (
-                  <View key={date} className="flex flex-row items-center border-b border-gray-100 py-2">
-                    <Text className="block w-32 text-sm font-medium">{scheduleData.datesWithWeek[index]}</Text>
-                    <Text className="block flex-1 text-sm text-blue-600 font-semibold">
-                      {scheduleData.dutySchedule[date] || '未排班'}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-
-          {/* 白班排班表 */}
           <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
-            <Text className="block text-base font-bold mb-3">白班排班（含上午/下午）</Text>
+            <Text className="block text-sm text-gray-500 mb-2">点击单元格设置医生</Text>
             <ScrollView scrollX className="w-full overflow-x-auto">
               <View className="min-w-max">
                 {/* 表头 */}
@@ -708,16 +744,14 @@ const IndexPage = () => {
                       // 优化显示：如果上下午是同一个医生，只显示一次名字
                       let slotText = ''
                       if (slots.length === 0) {
-                        slotText = '休息'
+                        slotText = '点击设置'
                       } else if (slots.length === 1) {
                         const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
                         slotText = `${slots[0].doctor}${suffix}`
                       } else if (slots.length === 2) {
-                        // 如果两个班次的医生相同，只显示一次
                         if (slots[0].doctor === slots[1].doctor) {
                           slotText = slots[0].doctor
                         } else {
-                          // 否则分别显示
                           slotText = slots.map(s => {
                             const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
                             return `${s.doctor}${suffix}`
@@ -726,8 +760,12 @@ const IndexPage = () => {
                       }
 
                       return (
-                        <View key={date} className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
-                          <Text className={`text-xs text-center whitespace-pre-line ${slotText && slotText !== '休息' ? 'text-gray-800' : 'text-gray-400'}`}>
+                        <View
+                          key={date}
+                          className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center cursor-pointer active:bg-blue-50"
+                          onTap={() => handleDepartmentCellClick(date, department)}
+                        >
+                          <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
                             {slotText}
                           </Text>
                         </View>
@@ -742,6 +780,7 @@ const IndexPage = () => {
           {/* 医生排班表 */}
           <Text className="block text-lg font-bold mb-3 mt-6">医生排班表</Text>
           <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
+            <Text className="block text-sm text-gray-500 mb-2">点击单元格设置科室或休息</Text>
             <ScrollView scrollX className="w-full overflow-x-auto">
               <View className="min-w-max">
                 {/* 表头 */}
@@ -769,27 +808,25 @@ const IndexPage = () => {
                         const shift = schedule?.shifts[date]
                         const department = (schedule as any)?.departmentsByDate?.[date]
                         const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
-                        const isFixed = fixedSchedule[date]?.[doctor] // 检查是否为固定排班
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'
 
-                        // 显示逻辑：值班是独立状态
                         if (hasNightShift) {
                           shiftText = '值班'
                           shiftColor = 'text-red-600'
                         } else if (shift === 'morning') {
-                          shiftText = department || '休息'
-                          shiftColor = isFixed ? 'text-orange-600' : 'text-blue-600' // 固定排班用橙色
+                          shiftText = department || '点击设置'
+                          shiftColor = 'text-blue-600'
                         } else {
-                          shiftText = '休息'
-                          shiftColor = isFixed ? 'text-orange-600' : 'text-gray-400' // 固定排班用橙色
+                          shiftText = '点击设置'
+                          shiftColor = 'text-gray-400'
                         }
 
                         return (
                           <View
                             key={date}
                             className={`w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center ${!hasNightShift ? 'cursor-pointer active:bg-blue-50' : ''}`}
-                            onTap={() => !hasNightShift && handleCellClick(doctor, date)}
+                            onTap={() => !hasNightShift && handleDoctorCellClick(doctor, date)}
                           >
                             <Text className={`text-xs text-center ${shiftColor}`}>
                               {shiftText}
@@ -800,6 +837,24 @@ const IndexPage = () => {
                     </View>
                   )
                 })}
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* 值班表 */}
+          <Text className="block text-lg font-bold mb-3 mt-6">夜间值班表</Text>
+          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
+            <Text className="block text-sm text-gray-500 mb-2">由系统自动生成</Text>
+            <ScrollView scrollX className="w-full overflow-x-auto">
+              <View className="min-w-max">
+                {scheduleData.dates.map((date, index) => (
+                  <View key={date} className="flex flex-row items-center border-b border-gray-100 py-2">
+                    <Text className="block w-32 text-sm font-medium">{scheduleData.datesWithWeek[index]}</Text>
+                    <Text className="block flex-1 text-sm text-blue-600 font-semibold">
+                      {scheduleData.dutySchedule[date] || '待自动填充'}
+                    </Text>
+                  </View>
+                ))}
               </View>
             </ScrollView>
           </View>
@@ -856,7 +911,10 @@ const IndexPage = () => {
 
           <View className="mt-4 mb-20 text-center">
             <Text className="block text-xs text-gray-500">
-              点击排班表单元格可查看详情，确认无误后点击&ldquo;下载文档&rdquo;导出Word格式
+              1. 点击表格单元格手动设置固定排班
+              2. 3个表格自动关联更新
+              3. 点击&ldquo;自动填充&rdquo;按钮系统填充剩余空位
+              4. 确认无误后点击&ldquo;下载文档&rdquo;导出Word格式
             </Text>
           </View>
         </View>
@@ -867,16 +925,10 @@ const IndexPage = () => {
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <View className="bg-white rounded-lg p-6 mx-4 w-80">
             <Text className="block text-lg font-bold mb-4 text-center">
-              修改排班
+              {editingCell.type === 'department' ? '设置医生' : '设置排班'}
             </Text>
             <View className="mb-4">
-              <Text className="block text-sm text-gray-600 mb-2">
-                医生：{editingCell.doctor}
-              </Text>
               <Text className="block text-sm text-gray-600 mb-4">
-                日期：{editingCell.date}
-              </Text>
-              <Text className="block text-sm text-gray-600 mb-2">
                 选择科室或休息：
               </Text>
               <View className="flex flex-col gap-2">
@@ -888,7 +940,7 @@ const IndexPage = () => {
                     休息
                   </Text>
                 </View>
-                {scheduleData?.departments.map((dept) => (
+                {DEPARTMENTS.map((dept) => (
                   <View
                     key={dept}
                     className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
