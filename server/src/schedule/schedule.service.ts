@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun } from 'docx'
+import { LLMClient, Config } from 'coze-coding-dev-sdk'
 
 // 固定的医生列表（14人）
 const FIXED_DOCTORS = [
@@ -68,13 +69,13 @@ export class ScheduleService {
    * @param leaveDoctors 请假医生列表（字符串数组或对象数组）
    * @param aiRequirements AI排班需求（可选）
    */
-  generateSchedule(
+  async generateSchedule(
     startDate: string,
     doctors?: string[] | { name: string; isMainDuty?: boolean }[],
     dutyStartDoctor?: string,
     leaveDoctors?: string[] | LeaveInfo[],
     aiRequirements?: string
-  ): ScheduleData {
+  ): Promise<ScheduleData> {
     console.log('🔥 generateSchedule 被调用，startDate:', startDate)
 
     // 将医生列表转换为字符串数组
@@ -104,8 +105,8 @@ export class ScheduleService {
     console.log('🔴🔴🔴 AI排班需求类型:', typeof aiRequirements)
     console.log('🔴🔴🔴 AI排班需求是否为空:', !aiRequirements || aiRequirements.trim() === '')
 
-    // 解析AI排班需求
-    const aiConstraints = this.parseAiRequirements(aiRequirements || '')
+    // 解析AI排班需求（使用大模型）
+    const aiConstraints = await this.parseAiRequirements(aiRequirements || '')
     console.log('解析的AI约束:', aiConstraints)
 
     if (doctorList.length === 0) {
@@ -1016,11 +1017,11 @@ export class ScheduleService {
   }
 
   /**
-   * 解析AI排班需求
+   * 解析AI排班需求（使用大模型）
    * @param requirements AI需求文本
    * @returns 解析后的约束条件
    */
-  private parseAiRequirements(requirements: string): AiConstraints {
+  private async parseAiRequirements(requirements: string): Promise<AiConstraints> {
     const result: AiConstraints = {
       doctorConstraints: {}
     }
@@ -1029,7 +1030,114 @@ export class ScheduleService {
       return result
     }
 
-    // 简单规则解析（实际应用中可以使用LLM进行更复杂的解析）
+    console.log('🤖 开始使用大模型解析AI需求:', requirements)
+
+    try {
+      const config = new Config()
+      const client = new LLMClient(config)
+
+      const systemPrompt = `你是一个专业的医院排班系统助手。你的任务是解析用户的自然语言排班需求，将其转换为结构化的约束条件。
+
+可用科室列表：${this.departments.join(', ')}
+可用星期：周一、周二、周三、周四、周五、周六、周日
+
+请从用户需求中提取以下信息：
+1. 科室约束：哪些医生必须排在哪个科室
+2. 休息日约束：哪些医生必须在哪几天休息
+
+返回格式必须是有效的JSON，不要包含任何其他文字：
+{
+  "doctorConstraints": {
+    "医生姓名": {
+      "departments": ["科室名称"],
+      "offDays": ["周一", "周二"]
+    }
+  }
+}
+
+示例：
+输入："李茜必须在5诊室，姜维周二休息"
+输出：
+{
+  "doctorConstraints": {
+    "李茜": {
+      "departments": ["5诊室"],
+      "offDays": []
+    },
+    "姜维": {
+      "departments": [],
+      "offDays": ["周二"]
+    }
+  }
+}
+
+注意：
+- 如果没有约束条件，返回 {"doctorConstraints": {}}
+- 只提取明确的约束，不要推断
+- 返回的科室名称必须从可用科室列表中选择
+- 返回的星期名称必须是：周一、周二、周三、周四、周五、周六、周日`
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: `请解析以下排班需求：${requirements}` }
+      ]
+
+      const response = await client.invoke(messages, {
+        model: 'doubao-seed-1-8-251228',
+        temperature: 0.3
+      })
+
+      console.log('🤖 大模型返回:', response.content)
+
+      // 尝试解析JSON
+      let parsedResult: any
+      try {
+        // 清理可能存在的markdown代码块标记
+        const cleanedContent = response.content
+          .replace(/```json\s*/g, '')
+          .replace(/```\s*/g, '')
+          .trim()
+
+        parsedResult = JSON.parse(cleanedContent)
+        console.log('🤖 解析后的约束:', JSON.stringify(parsedResult, null, 2))
+
+        if (parsedResult.doctorConstraints && typeof parsedResult.doctorConstraints === 'object') {
+          result.doctorConstraints = parsedResult.doctorConstraints
+        }
+      } catch (parseError) {
+        console.error('🤖 解析大模型返回结果失败:', parseError)
+        console.log('🤖 原始返回:', response.content)
+
+        // 如果JSON解析失败，降级到简单的正则表达式匹配
+        console.log('🤖 降级到简单规则解析')
+        return this.parseAiRequirementsFallback(requirements)
+      }
+    } catch (llmError) {
+      console.error('🤖 大模型调用失败:', llmError)
+      console.log('🤖 降级到简单规则解析')
+      return this.parseAiRequirementsFallback(requirements)
+    }
+
+    return result
+  }
+
+  /**
+   * 降级解析方法（使用正则表达式）
+   * @param requirements AI需求文本
+   * @returns 解析后的约束条件
+   */
+  private parseAiRequirementsFallback(requirements: string): AiConstraints {
+    const result: AiConstraints = {
+      doctorConstraints: {}
+    }
+
+    if (!requirements.trim()) {
+      return result
+    }
+
+    console.log('🤖 使用简单规则解析:', requirements)
+
+    // 简单规则解析
     const lines = requirements.split(/[。,，\n]/).filter(line => line.trim())
 
     lines.forEach(line => {

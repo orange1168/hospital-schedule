@@ -23,7 +23,7 @@ export class ScheduleController {
    * 生成排班表
    */
   @Post('generate')
-  generateSchedule(@Body() body: GenerateScheduleDto) {
+  async generateSchedule(@Body() body: GenerateScheduleDto) {
     console.log('收到排班生成请求:', body)
     const { startDate, doctors, dutyStartDoctor, leaveRequests, aiRequirements } = body
 
@@ -36,7 +36,7 @@ export class ScheduleController {
     }
 
     try {
-      const scheduleData = this.scheduleService.generateSchedule(
+      const scheduleData = await this.scheduleService.generateSchedule(
         startDate,
         doctors,
         dutyStartDoctor,
