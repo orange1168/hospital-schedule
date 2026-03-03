@@ -78,6 +78,9 @@ const IndexPage = () => {
   const [showDoctorSelection, setShowDoctorSelection] = useState(false) // 是否显示医生选择
   const [selectedDoctor, setSelectedDoctor] = useState('') // 选中的医生
 
+  // 平台检测
+  const isH5 = Taro.getEnv() === Taro.ENV_TYPE.WEB
+
   // 获取日期列表
   const getDates = (): string[] => {
     if (!startDate) return []
@@ -721,7 +724,7 @@ const IndexPage = () => {
                 <View className="flex flex-row">
                   <View
                     className="w-24 bg-blue-50 p-2 border border-gray-200 z-10"
-                    style={{ position: 'sticky', left: 0 }}
+                    style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#eff6ff' } : {}}
                   >
                     <Text className="block text-sm font-bold text-center">科室</Text>
                   </View>
@@ -737,7 +740,7 @@ const IndexPage = () => {
                   <View key={department} className="flex flex-row">
                     <View
                       className="w-24 bg-gray-50 p-2 border border-gray-200 z-10"
-                      style={{ position: 'sticky', left: 0 }}
+                      style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f9fafb' } : {}}
                     >
                       <Text className="block text-sm font-medium text-center">{department}</Text>
                     </View>
@@ -790,7 +793,7 @@ const IndexPage = () => {
                 <View className="flex flex-row">
                   <View
                     className="w-24 bg-purple-50 p-2 border border-gray-200 z-10"
-                    style={{ position: 'sticky', left: 0 }}
+                    style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#faf5ff' } : {}}
                   >
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
@@ -809,7 +812,7 @@ const IndexPage = () => {
                     <View key={doctor} className="flex flex-row">
                       <View
                         className="w-24 bg-gray-50 p-2 border border-gray-200 z-10"
-                        style={{ position: 'sticky', left: 0 }}
+                        style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f9fafb' } : {}}
                       >
                         <Text className="block text-sm font-medium text-center">{doctor}</Text>
                       </View>
@@ -860,7 +863,7 @@ const IndexPage = () => {
                   <View key={date} className="flex flex-row items-center border-b border-gray-100 py-2">
                     <Text
                       className="block w-32 text-sm font-medium bg-white z-10"
-                      style={{ position: 'sticky', left: 0 }}
+                      style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#ffffff' } : {}}
                     >
                       {scheduleData.datesWithWeek[index]}
                     </Text>
@@ -882,7 +885,7 @@ const IndexPage = () => {
                 <View className="flex flex-row">
                   <View
                     className="w-24 bg-green-50 p-2 border border-gray-200 z-10"
-                    style={{ position: 'sticky', left: 0 }}
+                    style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f0fdf4' } : {}}
                   >
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
@@ -905,7 +908,7 @@ const IndexPage = () => {
                   <View key={info.name} className="flex flex-row">
                     <View
                       className="w-24 bg-gray-50 p-2 border border-gray-200 z-10"
-                      style={{ position: 'sticky', left: 0 }}
+                      style={isH5 ? { position: 'sticky', left: 0, backgroundColor: '#f9fafb' } : {}}
                     >
                       <Text className="block text-sm font-medium text-center">{info.name}</Text>
                     </View>
@@ -957,50 +960,51 @@ const IndexPage = () => {
           </View>
         </View>
       )}
+    </ScrollView>
 
-      {/* 科室/医生选择弹窗 */}
-      {showCellEditModal && editingCell && (
-        <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <View className="bg-white rounded-lg p-6 mx-4 w-80">
-            {editingCell.type === 'department' && !showDoctorSelection ? (
-              // 科室排班表：显示当前医生和操作选项
-              <>
-                <Text className="block text-lg font-bold mb-2 text-center">
-                  {editingCell.key2} - {editingCell.key1}
-                </Text>
-                <Text className="block text-sm text-gray-500 mb-4 text-center">
-                  当前排班
-                </Text>
+    {/* 弹窗暂待修复
+    {showCellEditModal && editingCell && (
+      <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <View className="bg-white rounded-lg p-6 mx-4 w-80">
+          {editingCell.type === 'department' && !showDoctorSelection ? (
+            // 科室排班表：显示当前医生和操作选项
+            <>
+              <Text className="block text-lg font-bold mb-2 text-center">
+                {editingCell.key2} - {editingCell.key1}
+              </Text>
+              <Text className="block text-sm text-gray-500 mb-4 text-center">
+                当前排班
+              </Text>
 
-                {/* 显示当前医生 */}
-                {(() => {
-                  const date = editingCell.key1
-                  const dept = editingCell.key2
-                  const slots = scheduleData?.schedule[date]?.[dept] || []
+              {/* 显示当前医生 */}
+              {(() => {
+                const date = editingCell.key1
+                const dept = editingCell.key2
+                const slots = scheduleData?.schedule[date]?.[dept] || []
 
-                  if (slots.length === 0) {
-                    return (
-                      <View className="mb-4 bg-gray-50 rounded-lg p-4">
-                        <Text className="block text-sm text-gray-500 text-center">
-                          未设置医生
-                        </Text>
-                      </View>
-                    )
-                  }
-
-                  // 提取唯一医生
-                  const uniqueDoctors = [...new Set(slots.map(s => s.doctor))]
-
+                if (slots.length === 0) {
                   return (
-                    <View className="mb-4 bg-blue-50 rounded-lg p-4">
-                      {uniqueDoctors.map((doctor) => (
-                        <Text key={doctor} className="block text-sm text-gray-800 text-center font-medium">
-                          {doctor}
-                        </Text>
-                      ))}
+                    <View className="mb-4 bg-gray-50 rounded-lg p-4">
+                      <Text className="block text-sm text-gray-500 text-center">
+                        未设置医生
+                      </Text>
                     </View>
                   )
-                })()}
+                }
+
+                // 提取唯一医生
+                const uniqueDoctors = [...new Set(slots.map(s => s.doctor))]
+
+                return (
+                  <View className="mb-4 bg-blue-50 rounded-lg p-4">
+                    {uniqueDoctors.map((doctor) => (
+                      <Text key={doctor} className="block text-sm text-gray-800 text-center font-medium">
+                        {doctor}
+                      </Text>
+                    ))}
+                  </View>
+                )
+              })()}
 
                 {/* 操作按钮 */}
                 <View className="flex flex-col gap-2">
@@ -1181,7 +1185,7 @@ const IndexPage = () => {
           </View>
         </View>
       )}
-    </ScrollView>
+  */}
   )
 }
 
