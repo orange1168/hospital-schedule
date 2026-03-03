@@ -97,10 +97,12 @@ export class ScheduleService {
       console.log('请假信息:', leaveMap)
     }
 
-    console.log('开始生成排班，医生列表:', doctorList)
-    console.log('值班起始医生:', dutyStartDoctor)
-    console.log('请假医生:', leaveMap)
-    console.log('AI排班需求:', aiRequirements)
+    console.log('🔴🔴🔴 开始生成排班，医生列表:', doctorList)
+    console.log('🔴🔴🔴 值班起始医生:', dutyStartDoctor)
+    console.log('🔴🔴🔴 请假医生:', leaveMap)
+    console.log('🔴🔴🔴 AI排班需求:', aiRequirements)
+    console.log('🔴🔴🔴 AI排班需求类型:', typeof aiRequirements)
+    console.log('🔴🔴🔴 AI排班需求是否为空:', !aiRequirements || aiRequirements.trim() === '')
 
     // 解析AI排班需求
     const aiConstraints = this.parseAiRequirements(aiRequirements || '')
@@ -505,48 +507,67 @@ export class ScheduleService {
 
       console.log(`${date} (${isWeekend ? '周末' : '工作日'}) 需要排科室数量: ${departmentsForDay.length}`)
 
-      departmentsForDay.forEach((dept, deptIndex) => {
-        if (doctorsWorking.length > 0) {
-          // 🔴 CRITICAL: 强制检查AI约束 - 如果某个科室被AI约束要求必须由某个医生排班，则优先分配
-          let aiRequiredDoctor = ''
-          for (const doctor of availableDoctors) {
-            const requiredDept = getRequiredDepartment(doctor, date)
-            if (requiredDept === dept) {
-              aiRequiredDoctor = doctor
-              console.log(`🔴 ${date} ${dept} AI约束: ${doctor} 必须排此科室`)
+      // 🔴 CRITICAL: 优先分配 AI 约束的科室 - 在分配科室之前，先处理所有 AI 约束
+      const assignedDepartments = new Set<string>() // 记录已分配的科室
 
-              // 检查该医生是否在工作列表中
-              if (!doctorsWorking.includes(aiRequiredDoctor)) {
-                console.warn(`⚠️ ${date} ${dept} AI约束医生 ${aiRequiredDoctor} 不在工作列表中（可能请假或休息），无法满足约束`)
-              }
-              // 检查该医生今天是否已经排过班
-              else if (doctorSchedule[aiRequiredDoctor].shifts[date]) {
-                console.warn(`⚠️ ${date} ${dept} AI约束医生 ${aiRequiredDoctor} 今天已排班，无法满足约束`)
+      departmentsForDay.forEach((dept) => {
+        for (const doctor of availableDoctors) {
+          const requiredDept = getRequiredDepartment(doctor, date)
+          if (requiredDept === dept && !assignedDepartments.has(dept)) {
+            // 检查医生是否可用
+            if (doctorsWorking.includes(doctor) && !doctorSchedule[doctor].shifts[date]) {
+              // 直接分配该医生到指定科室
+              schedule[date][dept].push({
+                doctor: doctor,
+                shift: 'morning',
+                department: dept
+              })
+
+              schedule[date][dept].push({
+                doctor: doctor,
+                shift: 'afternoon',
+                department: dept
+              })
+
+              // 🔴 CRITICAL: 设置白班状态
+              doctorSchedule[doctor].shifts[date] = 'morning'
+              doctorSchedule[doctor].departmentsByDate[date] = dept
+              doctorSchedule[doctor].morningShifts.push(dept)
+              doctorSchedule[doctor].afternoonShifts.push(dept)
+
+              // 统计天数
+              if (!doctorDailyWork[doctor].has(date)) {
+                doctorDailyWork[doctor].add(date)
+                doctorWorkDays[doctor]++
               }
 
-              break
+              assignedDepartments.add(dept)
+              console.log(`🔴 AI约束优先分配: ${doctor} → ${dept}`)
             }
           }
+        }
+      })
 
-          // ✅ 优先分配值班医生到第一个科室（如果AI约束不冲突）
+      departmentsForDay.forEach((dept, deptIndex) => {
+        // 🔴 跳过已经分配的科室
+        if (assignedDepartments.has(dept)) {
+          console.log(`${date} ${dept} 已通过 AI 约束分配，跳过`)
+          return
+        }
+
+        if (doctorsWorking.length > 0) {
+          // 🔴 CRITICAL: 正常分配医生到科室
           let bestDoctor = ''
           const dutyDoctor = dutySchedule[date] // 获取当天的值班医生
 
-          console.log(`🔴 ${date} ${dept}: 值班医生=${dutyDoctor}, AI约束医生=${aiRequiredDoctor || '无'}, 科室索引=${deptIndex}`)
-
-          // 优先级1: AI约束的医生
-          if (aiRequiredDoctor && doctorsWorking.includes(aiRequiredDoctor) && !doctorSchedule[aiRequiredDoctor].shifts[date]) {
-            bestDoctor = aiRequiredDoctor
-            console.log(`${date} ${dept} 强制分配AI约束医生: ${bestDoctor}`)
-          }
-          // 优先级2: 值班医生（仅限第一个科室）
-          else if (deptIndex === 0 && dutyDoctor &&
+          // 优先级1: 值班医生（仅限第一个科室）
+          if (deptIndex === 0 && dutyDoctor &&
               doctorsWorking.includes(dutyDoctor) &&
               !doctorSchedule[dutyDoctor].shifts[date]) {
             bestDoctor = dutyDoctor
             console.log(`${date} ${dept} 优先分配值班医生: ${bestDoctor}`)
           }
-          // 优先级3: 选择工作天数最少的医生
+          // 优先级2: 选择工作天数最少的医生
           else {
             let minWorkDays = Infinity
             const candidates: string[] = []
