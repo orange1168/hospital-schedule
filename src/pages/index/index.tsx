@@ -1,4 +1,4 @@
-import { View, Text, Button, ScrollView, Picker, Textarea } from '@tarojs/components'
+import { View, Text, Button, ScrollView, Picker } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
@@ -27,6 +27,12 @@ const FIXED_DOCTORS = [
   '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
 ]
 
+// 科室列表
+const DEPARTMENTS = [
+  '1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室',
+  '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'
+]
+
 const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
 
@@ -52,17 +58,16 @@ const IndexPage = () => {
     setStartDate(getNextMonday())
     setDutyStartDoctor('李茜')
   }, [])
-  
-  // AI排班需求相关状态
-  const [aiRequirements, setAiRequirements] = useState('')
-  const [showAiInput, setShowAiInput] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
-  
+
   // 请假相关状态
   const [showLeaveSelector, setShowLeaveSelector] = useState(false)
   const [leaveRecords, setLeaveRecords] = useState<Array<{ doctor: string; dates: string[] }>>([])
   const [currentLeaveDoctor, setCurrentLeaveDoctor] = useState('')
   const [currentLeaveDates, setCurrentLeaveDates] = useState<string[]>([])
+
+  // 固定排班相关状态
+  const [showFixedSchedule, setShowFixedSchedule] = useState(false)
+  const [fixedSchedule, setFixedSchedule] = useState<Record<string, Record<string, string>>>({})
 
   // 排班修改相关状态
   const [showCellEditModal, setShowCellEditModal] = useState(false)
@@ -179,15 +184,15 @@ const IndexPage = () => {
     setLoading(true)
 
     try {
-      console.log('开始生成排班，参数:', { startDate, dutyStartDoctor, leaveRecords, aiRequirements })
+      console.log('开始生成排班，参数:', { startDate, dutyStartDoctor, leaveRecords, fixedSchedule })
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
         data: {
           startDate,
           dutyStartDoctor,
-          leaveRequests: leaveRecords, // 🔴 修改：使用 leaveRequests 匹配后端
-          aiRequirements // 传递AI需求
+          leaveRequests: leaveRecords,
+          fixedSchedule
         }
       })
       console.log('排班生成响应:', res.data)
@@ -306,10 +311,10 @@ const IndexPage = () => {
       doctor: currentLeaveDoctor,
       dates: [...currentLeaveDates]
     }])
-    
+
     setCurrentLeaveDoctor('')
     setCurrentLeaveDates([])
-    
+
     Taro.showToast({
       title: '请假记录添加成功',
       icon: 'success'
@@ -321,87 +326,37 @@ const IndexPage = () => {
     setLeaveRecords(leaveRecords.filter((_, i) => i !== index))
   }
 
-  // 开始录音
-  const handleStartRecording = () => {
-    const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP
-    
-    if (!isWeapp) {
-      Taro.showToast({
-        title: '语音输入仅在小程序中可用',
-        icon: 'none'
-      })
-      return
-    }
-
-    const recorderManager = Taro.getRecorderManager()
-    
-    recorderManager.onStart(() => {
-      console.log('录音开始')
-      setIsRecording(true)
-      Taro.showToast({
-        title: '开始录音...',
-        icon: 'none'
-      })
-    })
-
-    recorderManager.onStop((res) => {
-      console.log('录音结束，文件路径:', res.tempFilePath)
-      setIsRecording(false)
-      
-      // 上传音频并转换为文本
-      handleProcessAudio(res.tempFilePath)
-    })
-
-    recorderManager.onError((err) => {
-      console.error('录音错误', err)
-      setIsRecording(false)
-      Taro.showToast({
-        title: '录音失败',
-        icon: 'none'
-      })
-    })
-
-    recorderManager.start({
-      format: 'mp3',
-      duration: 30000, // 最长30秒
+  // 清空固定排班
+  const handleClearFixedSchedule = () => {
+    setFixedSchedule({})
+    Taro.showToast({
+      title: '固定排班已清空',
+      icon: 'success'
     })
   }
 
-  // 处理音频文件
-  const handleProcessAudio = async (audioPath: string) => {
-    try {
-      Taro.showLoading({ title: '处理中...' })
-      
-      // 上传音频文件到后端进行语音识别
-      const res = await Network.uploadFile({
-        url: '/api/schedule/speech-to-text',
-        filePath: audioPath,
-        name: 'audio'
-      })
-      
-      const data = JSON.parse(res.data)
-      
-      if (data.code === 200 && data.data.text) {
-        setAiRequirements(data.data.text)
-        Taro.showToast({
-          title: '语音识别成功',
-          icon: 'success'
-        })
-      } else {
-        Taro.showToast({
-          title: '语音识别失败',
-          icon: 'none'
-        })
-      }
-    } catch (error) {
-      console.error('处理音频失败:', error)
-      Taro.showToast({
-        title: '处理失败',
-        icon: 'none'
-      })
-    } finally {
-      Taro.hideLoading()
+  // 获取日期列表
+  const getDates = (): string[] => {
+    if (!startDate) return []
+    const dates: string[] = []
+    const start = new Date(startDate)
+
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(start)
+      date.setDate(start.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
     }
+
+    return dates
+  }
+
+  // 获取日期和星期
+  const getDateWithWeek = (date: string): string => {
+    const dateObj = new Date(date)
+    const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const dayOfWeek = dateObj.getDay()
+
+    return `${date.split('-')[1]}-${date.split('-')[2]} ${dayNames[dayOfWeek]}`
   }
 
   return (
@@ -476,41 +431,95 @@ const IndexPage = () => {
             )}
           </View>
 
-          {/* AI排班需求 */}
-          <View className="mt-4 bg-purple-50 rounded-lg p-3">
+          {/* 固定排班设置 */}
+          <View className="mt-4 bg-blue-50 rounded-lg p-3">
             <View className="flex flex-row items-center justify-between mb-2">
-              <Text className="block text-sm font-medium">AI排班需求：</Text>
-              <Button
-                className="px-3 py-1 bg-purple-500 text-white rounded text-xs"
-                onTap={() => setShowAiInput(!showAiInput)}
-              >
-                {showAiInput ? '隐藏' : '显示'}
-              </Button>
+              <Text className="block text-sm font-medium">固定排班设置：</Text>
+              <View className="flex flex-row gap-2">
+                {Object.keys(fixedSchedule).length > 0 && (
+                  <Button
+                    className="px-3 py-1 bg-red-500 text-white rounded text-xs"
+                    onTap={handleClearFixedSchedule}
+                  >
+                    清空
+                  </Button>
+                )}
+                <Button
+                  className="px-3 py-1 bg-blue-500 text-white rounded text-xs"
+                  onTap={() => setShowFixedSchedule(!showFixedSchedule)}
+                >
+                  {showFixedSchedule ? '隐藏' : '设置'}
+                </Button>
+              </View>
             </View>
-            
-            {showAiInput && (
+
+            {showFixedSchedule && (
               <View className="flex flex-col gap-2">
                 <Text className="block text-xs text-gray-600">
-                  输入特殊排班要求，例如：&ldquo;李茜必须排在1诊室&rdquo;、&ldquo;姜维周二休息&rdquo;
+                  手动设置固定排班，系统将基于您的设置自动填充剩余班次
                 </Text>
-                <View className="flex flex-row gap-2 items-center">
-                  <View className="flex-1 bg-white rounded-lg p-2">
-                    <Textarea
-                      className="w-full text-sm"
-                      placeholder="输入排班要求（可选）"
-                      value={aiRequirements}
-                      onInput={(e) => setAiRequirements(e.detail.value)}
-                      maxlength={500}
-                    />
+
+                {/* 显示日期列表，每个日期下显示医生选择器 */}
+                {startDate && (
+                  <View className="mt-2">
+                    {getDates().map((dateStr) => {
+                      const displayDate = getDateWithWeek(dateStr)
+                      return (
+                        <View key={dateStr} className="bg-white rounded-lg p-3 mb-2">
+                          <Text className="block text-sm font-medium mb-2">{displayDate}</Text>
+                          <View className="flex flex-col gap-2">
+                            {FIXED_DOCTORS.map((doctor) => {
+                              const fixedValue = fixedSchedule[dateStr]?.[doctor]
+                              return (
+                                <View key={`${dateStr}-${doctor}`} className="flex flex-row items-center gap-2">
+                                  <Text className="block text-xs w-16">{doctor}</Text>
+                                  <View className="flex-1">
+                                    <Picker
+                                      mode="selector"
+                                      range={['未设置', ...['休息', ...DEPARTMENTS]]}
+                                      value={fixedValue ? (fixedValue === '休息' ? 1 : ['休息', ...DEPARTMENTS].indexOf(fixedValue) + 1) : 0}
+                                      onChange={(e) => {
+                                        const index = Number(e.detail.value)
+                                        if (index === 0) {
+                                          // 未设置，删除
+                                          setFixedSchedule(prev => {
+                                            const newSchedule = { ...prev }
+                                            if (newSchedule[dateStr]?.[doctor]) {
+                                              delete newSchedule[dateStr][doctor]
+                                              if (Object.keys(newSchedule[dateStr]).length === 0) {
+                                                delete newSchedule[dateStr]
+                                              }
+                                            }
+                                            return newSchedule
+                                          })
+                                        } else {
+                                          const value = ['未设置', ...['休息', ...DEPARTMENTS]][index]
+                                          setFixedSchedule(prev => ({
+                                            ...prev,
+                                            [dateStr]: {
+                                              ...prev[dateStr],
+                                              [doctor]: value
+                                            }
+                                          }))
+                                        }
+                                      }}
+                                    >
+                                      <View className={`bg-gray-50 rounded px-3 py-2 ${fixedValue ? (fixedValue === '休息' ? 'bg-red-50' : 'bg-green-50') : ''}`}>
+                                        <Text className={`block text-xs ${fixedValue ? (fixedValue === '休息' ? 'text-red-600' : 'text-green-600') : ''}`}>
+                                          {fixedValue || '点击设置'}
+                                        </Text>
+                                      </View>
+                                    </Picker>
+                                  </View>
+                                </View>
+                              )
+                            })}
+                          </View>
+                        </View>
+                      )
+                    })}
                   </View>
-                  <Button
-                    className={`px-3 py-2 rounded text-xs ${isRecording ? 'bg-red-500' : 'bg-purple-500'} text-white`}
-                    onTap={isRecording ? () => {} : handleStartRecording}
-                    disabled={isRecording}
-                  >
-                    {isRecording ? '录音中...' : '🎤'}
-                  </Button>
-                </View>
+                )}
               </View>
             )}
           </View>
@@ -526,7 +535,7 @@ const IndexPage = () => {
                 {showLeaveSelector ? '隐藏' : '显示'}
               </Button>
             </View>
-            
+
             {showLeaveSelector && (
               <View className="flex flex-col gap-2">
                 {/* 选择请假医生 */}
@@ -695,7 +704,7 @@ const IndexPage = () => {
                     </View>
                     {scheduleData.dates.map((date) => {
                       const slots = scheduleData.schedule[date]?.[department] || []
-                      
+
                       // 优化显示：如果上下午是同一个医生，只显示一次名字
                       let slotText = ''
                       if (slots.length === 0) {
@@ -760,22 +769,20 @@ const IndexPage = () => {
                         const shift = schedule?.shifts[date]
                         const department = (schedule as any)?.departmentsByDate?.[date]
                         const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
+                        const isFixed = fixedSchedule[date]?.[doctor] // 检查是否为固定排班
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'
-                        
-                        // 🔴 显示逻辑：值班是独立状态
+
+                        // 显示逻辑：值班是独立状态
                         if (hasNightShift) {
                           shiftText = '值班'
                           shiftColor = 'text-red-600'
                         } else if (shift === 'morning') {
                           shiftText = department || '休息'
-                          shiftColor = 'text-blue-600'
-                        } else if (shift === 'night') {
-                          shiftText = '值班 夜班'
-                          shiftColor = 'text-red-600'
+                          shiftColor = isFixed ? 'text-orange-600' : 'text-blue-600' // 固定排班用橙色
                         } else {
                           shiftText = '休息'
-                          shiftColor = 'text-gray-400'
+                          shiftColor = isFixed ? 'text-orange-600' : 'text-gray-400' // 固定排班用橙色
                         }
 
                         return (

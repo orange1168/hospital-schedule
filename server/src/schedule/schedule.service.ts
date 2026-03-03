@@ -1,12 +1,18 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun } from 'docx'
-import { LLMClient, Config } from 'coze-coding-dev-sdk'
 
 // 固定的医生列表（14人）
 const FIXED_DOCTORS = [
   '李茜', '姜维', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎', '杨波',
   '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
 ]
+
+// 固定排班接口
+export interface FixedSchedule {
+  [date: string]: {
+    [doctor: string]: string // 科室名称 或 '休息'
+  }
+}
 
 // 班次类型
 export type ShiftType = 'morning' | 'afternoon' | 'night' | 'off'
@@ -48,11 +54,6 @@ export interface LeaveInfo {
   dates: string[] // 请假日期列表
 }
 
-// AI约束接口
-interface AiConstraints {
-  doctorConstraints: Record<string, { departments: string[]; days: string[]; offDays: string[] }>
-}
-
 @Injectable()
 export class ScheduleService {
   // 科室列表
@@ -67,16 +68,17 @@ export class ScheduleService {
    * @param doctors 医生列表（可以是字符串数组或对象数组）
    * @param dutyStartDoctor 值班起始医生
    * @param leaveDoctors 请假医生列表（字符串数组或对象数组）
-   * @param aiRequirements AI排班需求（可选）
+   * @param fixedSchedule 固定排班数据（用户手动设置的）
    */
   async generateSchedule(
     startDate: string,
     doctors?: string[] | { name: string; isMainDuty?: boolean }[],
     dutyStartDoctor?: string,
     leaveDoctors?: string[] | LeaveInfo[],
-    aiRequirements?: string
+    fixedSchedule?: FixedSchedule
   ): Promise<ScheduleData> {
     console.log('🔥 generateSchedule 被调用，startDate:', startDate)
+    console.log('🔥 固定排班数据:', fixedSchedule)
 
     // 将医生列表转换为字符串数组
     const doctorList = doctors && doctors.length > 0
@@ -101,13 +103,7 @@ export class ScheduleService {
     console.log('🔴🔴🔴 开始生成排班，医生列表:', doctorList)
     console.log('🔴🔴🔴 值班起始医生:', dutyStartDoctor)
     console.log('🔴🔴🔴 请假医生:', leaveMap)
-    console.log('🔴🔴🔴 AI排班需求:', aiRequirements)
-    console.log('🔴🔴🔴 AI排班需求类型:', typeof aiRequirements)
-    console.log('🔴🔴🔴 AI排班需求是否为空:', !aiRequirements || aiRequirements.trim() === '')
-
-    // 解析AI排班需求（使用大模型）
-    const aiConstraints = await this.parseAiRequirements(aiRequirements || '')
-    console.log('解析的AI约束:', aiConstraints)
+    console.log('🔴🔴🔴 固定排班数据:', fixedSchedule)
 
     if (doctorList.length === 0) {
       throw new BadRequestException('请至少添加一名医生')
@@ -170,30 +166,20 @@ export class ScheduleService {
       return isLeave
     }
 
-    // 检查医生是否在AI约束中指定了休息日
-    const isDoctorOffByAi = (doctor: string, date: string): boolean => {
-      const constraint = aiConstraints.doctorConstraints[doctor]
-      if (!constraint || !constraint.offDays) return false
-      
-      // 获取日期的星期
+    // 检查医生在固定排班中是否已分配
+    const getFixedAssignment = (doctor: string, date: string): string | null => {
+      if (!fixedSchedule || !fixedSchedule[date] || !fixedSchedule[date][doctor]) {
+        return null
+      }
+      return fixedSchedule[date][doctor]
+    }
+
+    // 获取日期的星期名称
+    const getDayOfWeekName = (date: string): string => {
       const dateObj = new Date(date)
       const dayOfWeek = dateObj.getDay()
       const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-      const dayName = dayNames[dayOfWeek]
-      
-      return constraint.offDays.includes(dayName)
-    }
-
-    // 检查医生在AI约束中是否必须排某个科室
-    const getRequiredDepartment = (doctor: string, date: string): string | null => {
-      const constraint = aiConstraints.doctorConstraints[doctor]
-      if (!constraint || !constraint.departments || constraint.departments.length === 0) {
-        return null
-      }
-      
-      // 如果AI要求每天都排某个科室，则返回第一个科室
-      // 实际应用中可以根据日期或其他条件判断
-      return constraint.departments[0]
+      return dayNames[dayOfWeek]
     }
 
     // 🔴 CRITICAL: 先定义 restDatesMap，让 assignNightShifts 直接更新它
@@ -227,12 +213,11 @@ export class ScheduleService {
       availableDoctors,
       doctorSchedule,
       isDoctorOnLeave,
-      isDoctorOffByAi,
-      getRequiredDepartment
+      getFixedAssignment
     )
 
-    // 步骤3：检查每个医生的休息天数（考虑AI约束）
-    const failedDoctors = this.validateRestDays(doctorSchedule, dates, aiConstraints, availableDoctors)
+    // 步骤3：检查每个医生的休息天数
+    const failedDoctors = this.validateRestDays(doctorSchedule, dates, availableDoctors)
     if (failedDoctors.length > 0) {
       throw new BadRequestException(
         `人数不足，以下医生无法获得至少一天的休息：${failedDoctors.join('、')}`
@@ -438,8 +423,7 @@ export class ScheduleService {
     availableDoctors: string[],
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
-    isDoctorOffByAi: (doctor: string, date: string) => boolean,
-    getRequiredDepartment: (doctor: string, date: string) => string | null
+    getFixedAssignment: (doctor: string, date: string) => string | null
   ): void {
     // 🔴 CRITICAL: 不预先分配休息日，让值班医生的选择更灵活
     // 值班医生选择时优先选择休息时间最长的医生，自然确保公平
@@ -474,10 +458,43 @@ export class ScheduleService {
         console.log(`  ${date} ${doctor} 设置为休息`)
       })
 
-      const doctorsWorking = availableDoctors.filter(d => 
-        !todayOff.has(d) && 
+      // 🔴 CRITICAL: 先应用固定排班
+      const fixedAssignedDoctors = new Set<string>()
+      for (const doctor of availableDoctors) {
+        const fixedDept = getFixedAssignment(doctor, date)
+        if (fixedDept) {
+          if (fixedDept === '休息') {
+            // 固定为休息
+            doctorSchedule[doctor].shifts[date] = 'off'
+            console.log(`  ${date} ${doctor} 固定排班设置为休息`)
+          } else {
+            // 固定到指定科室
+            schedule[date][fixedDept].push({
+              doctor: doctor,
+              shift: 'morning',
+              department: fixedDept
+            })
+
+            schedule[date][fixedDept].push({
+              doctor: doctor,
+              shift: 'afternoon',
+              department: fixedDept
+            })
+
+            doctorSchedule[doctor].shifts[date] = 'morning'
+            doctorSchedule[doctor].departmentsByDate[date] = fixedDept
+            doctorSchedule[doctor].morningShifts.push(fixedDept)
+            doctorSchedule[doctor].afternoonShifts.push(fixedDept)
+            console.log(`  ${date} ${doctor} 固定排班设置为 ${fixedDept}`)
+          }
+          fixedAssignedDoctors.add(doctor)
+        }
+      }
+
+      const doctorsWorking = availableDoctors.filter(d =>
+        !todayOff.has(d) &&
         !isDoctorOnLeave(d, date) &&
-        !isDoctorOffByAi(d, date) &&
+        !fixedAssignedDoctors.has(d) && // 🔴 排除已固定排班的医生
         doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已标记为休息的医生
       )
 
@@ -508,51 +525,18 @@ export class ScheduleService {
 
       console.log(`${date} (${isWeekend ? '周末' : '工作日'}) 需要排科室数量: ${departmentsForDay.length}`)
 
-      // 🔴 CRITICAL: 优先分配 AI 约束的科室 - 在分配科室之前，先处理所有 AI 约束
-      const assignedDepartments = new Set<string>() // 记录已分配的科室
-
-      departmentsForDay.forEach((dept) => {
-        for (const doctor of availableDoctors) {
-          const requiredDept = getRequiredDepartment(doctor, date)
-          if (requiredDept === dept && !assignedDepartments.has(dept)) {
-            // 检查医生是否可用
-            if (doctorsWorking.includes(doctor) && !doctorSchedule[doctor].shifts[date]) {
-              // 直接分配该医生到指定科室
-              schedule[date][dept].push({
-                doctor: doctor,
-                shift: 'morning',
-                department: dept
-              })
-
-              schedule[date][dept].push({
-                doctor: doctor,
-                shift: 'afternoon',
-                department: dept
-              })
-
-              // 🔴 CRITICAL: 设置白班状态
-              doctorSchedule[doctor].shifts[date] = 'morning'
-              doctorSchedule[doctor].departmentsByDate[date] = dept
-              doctorSchedule[doctor].morningShifts.push(dept)
-              doctorSchedule[doctor].afternoonShifts.push(dept)
-
-              // 统计天数
-              if (!doctorDailyWork[doctor].has(date)) {
-                doctorDailyWork[doctor].add(date)
-                doctorWorkDays[doctor]++
-              }
-
-              assignedDepartments.add(dept)
-              console.log(`🔴 AI约束优先分配: ${doctor} → ${dept}`)
-            }
-          }
+      // 🔴 CRITICAL: 记录已分配的科室（包括固定排班）
+      const assignedDepartments = new Set<string>()
+      for (const dept of departmentsForDay) {
+        if (schedule[date][dept].length > 0) {
+          assignedDepartments.add(dept)
         }
-      })
+      }
 
       departmentsForDay.forEach((dept, deptIndex) => {
-        // 🔴 跳过已经分配的科室
+        // 🔴 跳过已经分配的科室（包括固定排班）
         if (assignedDepartments.has(dept)) {
-          console.log(`${date} ${dept} 已通过 AI 约束分配，跳过`)
+          console.log(`${date} ${dept} 已分配（可能是固定排班），跳过`)
           return
         }
 
@@ -674,12 +658,11 @@ export class ScheduleService {
   }
 
   /**
-   * 验证休息天数（考虑AI约束）
+   * 验证休息天数
    */
   private validateRestDays(
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[],
-    aiConstraints: AiConstraints,
     availableDoctors: string[]  // 只验证可用医生的休息天数
   ): string[] {
     const failedDoctors: string[] = []
@@ -688,23 +671,19 @@ export class ScheduleService {
     availableDoctors.forEach(doctorName => {
       const info = doctorSchedule[doctorName]
       if (!info) return
-      
-      // 检查是否有AI约束要求该医生每天都工作
-      const constraint = aiConstraints.doctorConstraints[info.name]
-      const mustWorkEveryDay = constraint && constraint.departments && constraint.departments.length > 0
-      
+
       // 计算工作天数（包括白班和夜班）
-      const workDays = dates.filter(date => 
+      const workDays = dates.filter(date =>
         info.shifts[date] && info.shifts[date] !== 'off'
       ).length
-      
+
       // 休息天数 = 总天数 - 工作天数
       const restDays = dates.length - workDays
-      
+
       console.log(`${info.name}: 工作天数=${workDays}, 休息天数=${restDays}, shifts=${JSON.stringify(info.shifts)}`)
 
-      // 如果AI约束要求每天都工作，则跳过休息验证
-      if (!mustWorkEveryDay && restDays < 1) {
+      // 检查休息天数是否不足
+      if (restDays < 1) {
         failedDoctors.push(info.name)
       }
     })
@@ -1014,178 +993,5 @@ export class ScheduleService {
         right: { style: BorderStyle.SINGLE },
       },
     })
-  }
-
-  /**
-   * 解析AI排班需求（使用大模型）
-   * @param requirements AI需求文本
-   * @returns 解析后的约束条件
-   */
-  private async parseAiRequirements(requirements: string): Promise<AiConstraints> {
-    const result: AiConstraints = {
-      doctorConstraints: {}
-    }
-
-    if (!requirements.trim()) {
-      return result
-    }
-
-    console.log('🤖 开始使用大模型解析AI需求:', requirements)
-
-    try {
-      const config = new Config()
-      const client = new LLMClient(config)
-
-      const systemPrompt = `你是一个专业的医院排班系统助手。你的任务是解析用户的自然语言排班需求，将其转换为结构化的约束条件。
-
-可用科室列表：${this.departments.join(', ')}
-可用星期：周一、周二、周三、周四、周五、周六、周日
-
-请从用户需求中提取以下信息：
-1. 科室约束：哪些医生必须排在哪个科室
-2. 休息日约束：哪些医生必须在哪几天休息
-
-返回格式必须是有效的JSON，不要包含任何其他文字：
-{
-  "doctorConstraints": {
-    "医生姓名": {
-      "departments": ["科室名称"],
-      "offDays": ["周一", "周二"]
-    }
-  }
-}
-
-示例：
-输入："李茜必须在5诊室，姜维周二休息"
-输出：
-{
-  "doctorConstraints": {
-    "李茜": {
-      "departments": ["5诊室"],
-      "offDays": []
-    },
-    "姜维": {
-      "departments": [],
-      "offDays": ["周二"]
-    }
-  }
-}
-
-注意：
-- 如果没有约束条件，返回 {"doctorConstraints": {}}
-- 只提取明确的约束，不要推断
-- 返回的科室名称必须从可用科室列表中选择
-- 返回的星期名称必须是：周一、周二、周三、周四、周五、周六、周日`
-
-      const messages = [
-        { role: 'system' as const, content: systemPrompt },
-        { role: 'user' as const, content: `请解析以下排班需求：${requirements}` }
-      ]
-
-      const response = await client.invoke(messages, {
-        model: 'doubao-seed-1-8-251228',
-        temperature: 0.3
-      })
-
-      console.log('🤖 大模型返回:', response.content)
-
-      // 尝试解析JSON
-      let parsedResult: any
-      try {
-        // 清理可能存在的markdown代码块标记
-        const cleanedContent = response.content
-          .replace(/```json\s*/g, '')
-          .replace(/```\s*/g, '')
-          .trim()
-
-        parsedResult = JSON.parse(cleanedContent)
-        console.log('🤖 解析后的约束:', JSON.stringify(parsedResult, null, 2))
-
-        if (parsedResult.doctorConstraints && typeof parsedResult.doctorConstraints === 'object') {
-          result.doctorConstraints = parsedResult.doctorConstraints
-        }
-      } catch (parseError) {
-        console.error('🤖 解析大模型返回结果失败:', parseError)
-        console.log('🤖 原始返回:', response.content)
-
-        // 如果JSON解析失败，降级到简单的正则表达式匹配
-        console.log('🤖 降级到简单规则解析')
-        return this.parseAiRequirementsFallback(requirements)
-      }
-    } catch (llmError) {
-      console.error('🤖 大模型调用失败:', llmError)
-      console.log('🤖 降级到简单规则解析')
-      return this.parseAiRequirementsFallback(requirements)
-    }
-
-    return result
-  }
-
-  /**
-   * 降级解析方法（使用正则表达式）
-   * @param requirements AI需求文本
-   * @returns 解析后的约束条件
-   */
-  private parseAiRequirementsFallback(requirements: string): AiConstraints {
-    const result: AiConstraints = {
-      doctorConstraints: {}
-    }
-
-    if (!requirements.trim()) {
-      return result
-    }
-
-    console.log('🤖 使用简单规则解析:', requirements)
-
-    // 简单规则解析
-    const lines = requirements.split(/[。,，\n]/).filter(line => line.trim())
-
-    lines.forEach(line => {
-      const trimmedLine = line.trim()
-
-      // 解析"医生必须每天在科室"的规则
-      const mustEveryDayInDeptMatch = trimmedLine.match(/(.+?)必须每天(在)?(.+?诊室)/)
-      if (mustEveryDayInDeptMatch) {
-        const doctor = mustEveryDayInDeptMatch[1].trim()
-        const department = mustEveryDayInDeptMatch[3].trim()
-
-        console.log(`解析到AI约束: ${doctor} 必须每天在 ${department}`)
-
-        if (!result.doctorConstraints[doctor]) {
-          result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
-        }
-        result.doctorConstraints[doctor].departments.push(department)
-      } else {
-        // 解析"医生必须在科室"的规则（不包含"每天"）
-        const mustInDeptMatch = trimmedLine.match(/^(.+?)必须(在)?(.+?诊室)$/)
-        if (mustInDeptMatch) {
-          const doctor = mustInDeptMatch[1].trim()
-          const department = mustInDeptMatch[3].trim()
-
-          console.log(`解析到AI约束: ${doctor} 必须在 ${department}`)
-
-          if (!result.doctorConstraints[doctor]) {
-            result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
-          }
-          result.doctorConstraints[doctor].departments.push(department)
-        }
-      }
-
-      // 解析"医生某天休息"的规则
-      const restDayMatch = trimmedLine.match(/^(.+?)(周一|周二|周三|周四|周五|周六|周日)休息$/)
-      if (restDayMatch) {
-        const doctor = restDayMatch[1].trim()
-        const dayOfWeek = restDayMatch[2].trim()
-
-        console.log(`解析到AI约束: ${doctor} ${dayOfWeek} 休息`)
-
-        if (!result.doctorConstraints[doctor]) {
-          result.doctorConstraints[doctor] = { departments: [], days: [], offDays: [] }
-        }
-        result.doctorConstraints[doctor].offDays.push(dayOfWeek)
-      }
-    })
-
-    return result
   }
 }
