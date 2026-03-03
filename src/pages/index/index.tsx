@@ -149,6 +149,7 @@ const IndexPage = () => {
 
   // 处理单元格点击（科室排班表）
   const handleDepartmentCellClick = (date: string, department: string) => {
+    console.log('科室排班表点击:', { date, department, doctors: FIXED_DOCTORS })
     // 直接显示医生选择列表
     Taro.showActionSheet({
       itemList: ['取消设置', ...FIXED_DOCTORS],
