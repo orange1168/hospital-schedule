@@ -73,12 +73,6 @@ const IndexPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate])
 
-  // 请假相关状态
-  const [showLeaveSelector, setShowLeaveSelector] = useState(false)
-  const [leaveRecords, setLeaveRecords] = useState<Array<{ doctor: string; dates: string[] }>>([])
-  const [currentLeaveDoctor, setCurrentLeaveDoctor] = useState('')
-  const [currentLeaveDates, setCurrentLeaveDates] = useState<string[]>([])
-
   // 排班修改相关状态
   const [showCellEditModal, setShowCellEditModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ type: 'department' | 'doctor' | 'department_select_doctor'; key1: string; key2: string; key3?: string } | null>(null)
@@ -143,8 +137,8 @@ const IndexPage = () => {
           afternoon: 'off'
         }
         doctorSchedule[doctor].departmentsByDate[date] = {
-          morning: '休息',
-          afternoon: '休息'
+          morning: '请输入',
+          afternoon: '请输入'
         }
       })
     })
@@ -177,7 +171,7 @@ const IndexPage = () => {
     }
 
     setEditingCell({ type: 'doctor', key1: doctor, key2: date })
-    const dept = (schedule as any)?.departmentsByDate?.[date]?.morning || '休息'
+    const dept = (schedule as any)?.departmentsByDate?.[date]?.morning || '请输入'
     setSelectedDepartment(dept)
     setSelectedShiftType('full')
     setShowCellEditModal(true)
@@ -347,12 +341,12 @@ const IndexPage = () => {
     setLoading(true)
 
     try {
-      console.log('开始自动填充排班，参数:', { startDate, dutyStartDoctor, leaveRecords, scheduleData })
+      console.log('开始自动填充排班，参数:', { startDate, dutyStartDoctor, scheduleData })
 
       // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
       const fixedSchedule: Record<string, Record<string, {
-        morning: string | '休息'
-        afternoon: string | '休息'
+        morning: string | '请输入' | '休息' | '请假'
+        afternoon: string | '请输入' | '休息' | '请假'
       }>> = {}
 
       // 遍历医生排班表，提取每个医生每天的固定排班
@@ -386,7 +380,6 @@ const IndexPage = () => {
         data: {
           startDate,
           dutyStartDoctor,
-          leaveRequests: leaveRecords,
           fixedSchedule
         }
       })
@@ -484,43 +477,6 @@ const IndexPage = () => {
     setShowDutyStartPicker(false)
   }
 
-  // 添加请假记录
-  const handleAddLeaveRecord = () => {
-    if (!currentLeaveDoctor) {
-      Taro.showToast({
-        title: '请选择请假医生',
-        icon: 'none'
-      })
-      return
-    }
-
-    if (currentLeaveDates.length === 0) {
-      Taro.showToast({
-        title: '请至少选择一个请假日期',
-        icon: 'none'
-      })
-      return
-    }
-
-    setLeaveRecords([...leaveRecords, {
-      doctor: currentLeaveDoctor,
-      dates: [...currentLeaveDates]
-    }])
-
-    setCurrentLeaveDoctor('')
-    setCurrentLeaveDates([])
-
-    Taro.showToast({
-      title: '请假记录添加成功',
-      icon: 'success'
-    })
-  }
-
-  // 移除请假记录
-  const handleRemoveLeaveRecord = (index: number) => {
-    setLeaveRecords(leaveRecords.filter((_, i) => i !== index))
-  }
-
   return (
     <ScrollView scrollY className="h-screen bg-gray-50">
       <View className="bg-white p-4 mb-4 shadow-sm">
@@ -596,119 +552,6 @@ const IndexPage = () => {
               </View>
             )}
           </View>
-
-          {/* 请假设置 */}
-          <View className="mt-4 bg-yellow-50 rounded-lg p-3">
-            <View className="flex flex-row items-center justify-between mb-2">
-              <Text className="block text-sm font-medium">请假设置：</Text>
-              <Button
-                className="px-3 py-1 bg-yellow-500 text-white rounded text-xs"
-                onTap={() => setShowLeaveSelector(!showLeaveSelector)}
-              >
-                {showLeaveSelector ? '隐藏' : '显示'}
-              </Button>
-            </View>
-
-            {showLeaveSelector && (
-              <View className="flex flex-col gap-2">
-                {/* 选择请假医生 */}
-                <View className="flex flex-row items-center gap-2">
-                  <Text className="block text-xs w-16">请假医生：</Text>
-                  <View className="flex-1 bg-white rounded px-3 py-2">
-                    <Picker
-                      mode="selector"
-                      range={['无', ...FIXED_DOCTORS]}
-                      value={FIXED_DOCTORS.indexOf(currentLeaveDoctor) + 1}
-                      onChange={(e) => {
-                        const index = Number(e.detail.value)
-                        if (index === 0) {
-                          setCurrentLeaveDoctor('')
-                        } else {
-                          setCurrentLeaveDoctor(FIXED_DOCTORS[index - 1])
-                        }
-                      }}
-                    >
-                      <Text className="block text-xs">{currentLeaveDoctor || '请选择'}</Text>
-                    </Picker>
-                  </View>
-                </View>
-
-                {/* 请假日期 */}
-                <View className="flex flex-col gap-2">
-                  <Text className="block text-xs">请假日期：</Text>
-                  {currentLeaveDates.map((date, index) => (
-                    <View key={index} className="flex flex-row gap-2 items-center">
-                      <View className="flex-1 bg-white rounded px-3 py-2">
-                        <Picker
-                          mode="date"
-                          value={date}
-                          onChange={(e) => {
-                            const newDates = [...currentLeaveDates]
-                            newDates[index] = e.detail.value
-                            setCurrentLeaveDates(newDates)
-                          }}
-                        >
-                          <Text className="block text-xs">{date || '请选择日期'}</Text>
-                        </Picker>
-                      </View>
-                      <Button
-                        className="px-3 py-1 bg-red-500 text-white rounded text-xs"
-                        onTap={() => {
-                          const newDates = currentLeaveDates.filter((_, i) => i !== index)
-                          setCurrentLeaveDates(newDates)
-                        }}
-                      >
-                        删除
-                      </Button>
-                    </View>
-                  ))}
-                  <Button
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-xs"
-                    onTap={() => {
-                      if (!startDate) {
-                        Taro.showToast({ title: '请先选择开始日期', icon: 'none' })
-                        return
-                      }
-                      setCurrentLeaveDates([...currentLeaveDates, startDate])
-                    }}
-                  >
-                    + 添加请假日期
-                  </Button>
-                </View>
-
-                {/* 添加请假记录按钮 */}
-                <Button
-                  className="px-3 py-2 bg-green-500 text-white rounded text-xs"
-                  onTap={handleAddLeaveRecord}
-                >
-                  + 添加请假记录
-                </Button>
-
-                {/* 已添加的请假记录 */}
-                {leaveRecords.length > 0 && (
-                  <View className="mt-2">
-                    <Text className="block text-xs text-gray-600 mb-2">已添加的请假记录：</Text>
-                    {leaveRecords.map((record, index) => (
-                      <View key={index} className="flex flex-row items-center justify-between bg-white p-2 rounded mb-1">
-                        <View className="flex-1">
-                          <Text className="block text-xs">
-                            <Text className="font-semibold">{record.doctor}</Text>
-                            {' '}：{record.dates.join('、')}
-                          </Text>
-                        </View>
-                        <Button
-                          className="px-2 py-1 bg-red-500 text-white rounded text-xs"
-                          onTap={() => handleRemoveLeaveRecord(index)}
-                        >
-                          删除
-                        </Button>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
         </View>
       </View>
 
@@ -743,7 +586,7 @@ const IndexPage = () => {
                       </View>
                       {scheduleData.dates.map((date) => {
                         const shifts = schedule?.shifts[date] || { morning: 'off', afternoon: 'off' }
-                        const departments = (schedule as any)?.departmentsByDate?.[date] || { morning: '休息', afternoon: '休息' }
+                        const departments = (schedule as any)?.departmentsByDate?.[date] || { morning: '请输入', afternoon: '请输入' }
                         const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
                         
                         let shiftText = ''
@@ -758,8 +601,24 @@ const IndexPage = () => {
                           // 上下午班次显示
                           if (shifts.morning === 'off' && shifts.afternoon === 'off') {
                             // 全天休息
-                            shiftText = '休息'
-                            shiftColor = 'text-gray-400'
+                            // 检查是否是"休息"或"请假"
+                            const morningDept = departments.morning
+                            const afternoonDept = departments.afternoon
+                            
+                            if (morningDept === '休息' && afternoonDept === '休息') {
+                              shiftText = '休息'
+                              shiftColor = 'text-gray-400'
+                            } else if (morningDept === '请假' && afternoonDept === '请假') {
+                              shiftText = '请假'
+                              shiftColor = 'text-orange-600'
+                            } else if (morningDept === '请输入' && afternoonDept === '请输入') {
+                              shiftText = '请输入'
+                              shiftColor = 'text-gray-300'
+                            } else {
+                              // 混合状态（如上午休息，下午请假等）
+                              shiftText = `${morningDept}\n${afternoonDept}`
+                              shiftColor = 'text-orange-600'
+                            }
                           } else if (shifts.morning === 'work' && shifts.afternoon === 'work') {
                             // 全天上班
                             if (departments.morning === departments.afternoon) {
@@ -1017,15 +876,31 @@ const IndexPage = () => {
             
             <View className="mb-4">
               <Text className="block text-sm text-gray-600 mb-4">
-                选择科室或休息：
+                选择科室或状态：
               </Text>
               <View className="flex flex-col gap-2">
+                <View
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '请输入' ? 'bg-gray-50 border-gray-500' : 'border-gray-300'}`}
+                  onTap={() => handleDepartmentSelect('请输入')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '请输入' ? 'text-gray-600 font-medium' : 'text-gray-600'}`}>
+                    请输入（不限制）
+                  </Text>
+                </View>
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
                   onTap={() => handleDepartmentSelect('休息')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                    休息
+                    休息（算在每周一天的休息要求中）
+                  </Text>
+                </View>
+                <View
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '请假' ? 'bg-orange-50 border-orange-500' : 'border-gray-300'}`}
+                  onTap={() => handleDepartmentSelect('请假')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '请假' ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
+                    请假（额外休息，不算在每周一天的休息要求中）
                   </Text>
                 </View>
                 {DEPARTMENTS.map((dept) => (
