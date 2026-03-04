@@ -586,19 +586,25 @@ export class ScheduleService {
           }
 
           // 🔴 CRITICAL: 周末检查：如果是周末，只允许在前4个科室设置固定排班
+          // 🔴 CRITICAL: 如果是值班医生，且固定排班不在前4个科室，记录为需要调整，但不跳过整个固定排班
           if (isWeekend) {
-            // 检查上午科室是否在前4个
-            if (morning !== '请输入' && !weekendDepartments.includes(morning)) {
-              console.log(`  ⚠️ ${date} ${doctor} 固定排班上午科室 ${morning} 不在周末前4个科室内，跳过`)
+            const morningInvalid = morning !== '请输入' && !weekendDepartments.includes(morning)
+            const afternoonInvalid = afternoon !== '请输入' && !weekendDepartments.includes(afternoon)
+
+            // 如果是值班医生，且固定排班不在前4个科室，记录为需要调整
+            if (doctor === todayDutyDoctor && (morningInvalid || afternoonInvalid)) {
+              console.log(`🔴 ${date} 值班医生 ${doctor} 固定排班不在周末前4个科室内，将在值班医生分配阶段重新分配`)
+              ;(doctorSchedule[doctor] as any).needsWeekendAdjustment = true
+              // 不跳过，继续处理其他部分
             }
-            // 检查下午科室是否在前4个
-            if (afternoon !== '请输入' && !weekendDepartments.includes(afternoon)) {
-              console.log(`  ⚠️ ${date} ${doctor} 固定排班下午科室 ${afternoon} 不在周末前4个科室内，跳过`)
-            }
-            // 如果两个科室都不在前4个，跳过处理
-            if (morning !== '请输入' && !weekendDepartments.includes(morning) &&
-                afternoon !== '请输入' && !weekendDepartments.includes(afternoon)) {
+            // 如果不是值班医生，且两个科室都不在前4个，跳过处理
+            else if (morningInvalid && afternoonInvalid) {
+              console.log(`  ⚠️ ${date} ${doctor} 固定排班不在周末前4个科室内，跳过`)
               continue
+            }
+            // 如果只有半天不在前4个，只跳过那半天
+            else if (morningInvalid || afternoonInvalid) {
+              console.log(`  ⚠️ ${date} ${doctor} 部分固定排班不在周末前4个科室内，将跳过不符合的部分`)
             }
           }
 
@@ -703,9 +709,25 @@ export class ScheduleService {
         const fixedAssignment = getFixedAssignment(todayDutyDoctor, date)
         const hasFixedSchedule = fixedAssignment &&
                                 (fixedAssignment.morning !== '请输入' || fixedAssignment.afternoon !== '请输入')
+        const needsWeekendAdjustment = (doctorSchedule[todayDutyDoctor] as any).needsWeekendAdjustment
 
-        // 只有当值班医生没有固定排班时，才为其分配科室
-        if (!hasFixedSchedule) {
+        // 检查是否有有效的固定排班（休息、请假、或在周末前4个科室内的科室）
+        let hasValidFixedSchedule = false
+        if (fixedAssignment) {
+          // 如果是休息或请假，认为是有效固定排班
+          if (fixedAssignment.morning === '休息' || fixedAssignment.morning === '请假' ||
+              fixedAssignment.afternoon === '休息' || fixedAssignment.afternoon === '请假') {
+            hasValidFixedSchedule = true
+          }
+          // 如果是科室，检查是否在前4个（如果是周末）
+          else if (!isWeekend || (weekendDepartments.includes(fixedAssignment.morning) &&
+                                   weekendDepartments.includes(fixedAssignment.afternoon))) {
+            hasValidFixedSchedule = true
+          }
+        }
+
+        // 只有当值班医生没有有效的固定排班时，才为其分配科室
+        if (!hasValidFixedSchedule) {
           // 🔴 CRITICAL: 找到第一个没有被分配的科室，避免与固定排班冲突
           let availableDepartment = ''
           for (const dept of departmentsForDay) {
@@ -720,7 +742,7 @@ export class ScheduleService {
             console.log(`🔴 ${date} 所有科室都已被分配，跳过值班医生 ${todayDutyDoctor} 的科室分配`)
             fixedAssignedDoctors.add(todayDutyDoctor)
           } else {
-            console.log(`🔴 ${date} 优先为值班医生 ${todayDutyDoctor} 分配到 ${availableDepartment}`)
+            console.log(`🔴 ${date} 优先为值班医生 ${todayDutyDoctor} 分配到 ${availableDepartment}${needsWeekendAdjustment ? '（周末调整）' : ''}`)
 
             schedule[date][availableDepartment].push({
               doctor: todayDutyDoctor,
@@ -742,7 +764,7 @@ export class ScheduleService {
             fixedAssignedDoctors.add(todayDutyDoctor)
           }
         } else {
-          console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 已有固定排班，跳过科室分配`)
+          console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 已有有效固定排班，跳过科室分配`)
           // 即使有固定排班，也将值班医生加入 fixedAssignedDoctors，避免重复分配
           fixedAssignedDoctors.add(todayDutyDoctor)
         }
