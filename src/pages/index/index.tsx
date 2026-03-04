@@ -641,12 +641,12 @@ const IndexPage = () => {
               {/* 固定列：医生姓名 */}
               <View className="w-24 flex-shrink-0">
                 {/* 表头 */}
-                <View className="w-24 bg-purple-50 p-2 border border-gray-200">
+                <View className="w-24 bg-purple-50 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
                   <Text className="block text-sm font-bold text-center">医生</Text>
                 </View>
                 {/* 表格内容 */}
                 {FIXED_DOCTORS.map((doctor) => (
-                  <View key={doctor} className="w-24 bg-gray-50 p-2 border border-gray-200">
+                  <View key={doctor} className="w-24 bg-gray-50 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
                     <Text className="block text-sm font-medium text-center">{doctor}</Text>
                   </View>
                 ))}
@@ -656,8 +656,7 @@ const IndexPage = () => {
               <ScrollView
                 scrollX
                 className="flex-1"
-                enableFlex
-                scrollWithAnimation
+                style={{ width: 'calc(100% - 6rem)' }}
               >
                 <View className="min-w-max">
                   {/* 表头 */}
@@ -721,12 +720,12 @@ const IndexPage = () => {
               {/* 固定列：科室名称 */}
               <View className="w-24 flex-shrink-0">
                 {/* 表头 */}
-                <View className="w-24 bg-blue-50 p-2 border border-gray-200">
+                <View className="w-24 bg-blue-50 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
                   <Text className="block text-sm font-bold text-center">科室</Text>
                 </View>
                 {/* 表格内容 */}
                 {scheduleData.departments.map((department) => (
-                  <View key={department} className="w-24 bg-gray-50 p-2 border border-gray-200">
+                  <View key={department} className="w-24 bg-gray-50 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
                     <Text className="block text-sm font-medium text-center">{department}</Text>
                   </View>
                 ))}
@@ -736,8 +735,7 @@ const IndexPage = () => {
               <ScrollView
                 scrollX
                 className="flex-1"
-                enableFlex
-                scrollWithAnimation
+                style={{ width: 'calc(100% - 6rem)' }}
               >
                 <View className="min-w-max">
                   {/* 表头 */}
@@ -816,12 +814,12 @@ const IndexPage = () => {
               {/* 固定列：医生姓名 */}
               <View className="w-24 flex-shrink-0">
                 {/* 表头 */}
-                <View className="w-24 bg-green-50 p-2 border border-gray-200">
+                <View className="w-24 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                   <Text className="block text-sm font-bold text-center">医生</Text>
                 </View>
                 {/* 表格内容 */}
                 {Object.values(scheduleData.doctorSchedule).map((info) => (
-                  <View key={info.name} className="w-24 bg-gray-50 p-2 border border-gray-200">
+                  <View key={info.name} className="w-24 bg-gray-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                     <Text className="block text-sm font-medium text-center">{info.name}</Text>
                   </View>
                 ))}
@@ -831,8 +829,7 @@ const IndexPage = () => {
               <ScrollView
                 scrollX
                 className="flex-1"
-                enableFlex
-                scrollWithAnimation
+                style={{ width: 'calc(100% - 6rem)' }}
               >
                 <View className="min-w-max">
                   {/* 表头 */}
