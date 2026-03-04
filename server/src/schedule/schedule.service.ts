@@ -487,6 +487,14 @@ export class ScheduleService {
         console.log(`  ${date} ${doctor} 设置为休息`)
       })
 
+      // 🔴 CRITICAL: 判断是否是周末（周六或周日）
+      const dateObj = new Date(date)
+      const dayOfWeek = dateObj.getDay()
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 // 0是周日，6是周六
+
+      // 🔴 CRITICAL: 周末只排前4个科室
+      const weekendDepartments = this.departments.slice(0, 4)
+
       // 🔴 CRITICAL: 先应用固定排班（支持半天班次）
       const fixedAssignedDoctors = new Set<string>()
       for (const doctor of availableDoctors) {
@@ -577,6 +585,23 @@ export class ScheduleService {
             continue
           }
 
+          // 🔴 CRITICAL: 周末检查：如果是周末，只允许在前4个科室设置固定排班
+          if (isWeekend) {
+            // 检查上午科室是否在前4个
+            if (morning !== '请输入' && !weekendDepartments.includes(morning)) {
+              console.log(`  ⚠️ ${date} ${doctor} 固定排班上午科室 ${morning} 不在周末前4个科室内，跳过`)
+            }
+            // 检查下午科室是否在前4个
+            if (afternoon !== '请输入' && !weekendDepartments.includes(afternoon)) {
+              console.log(`  ⚠️ ${date} ${doctor} 固定排班下午科室 ${afternoon} 不在周末前4个科室内，跳过`)
+            }
+            // 如果两个科室都不在前4个，跳过处理
+            if (morning !== '请输入' && !weekendDepartments.includes(morning) &&
+                afternoon !== '请输入' && !weekendDepartments.includes(afternoon)) {
+              continue
+            }
+          }
+
           // 如果上下午都是同一个科室，标记为全天工作
           if (morning !== '请输入' && afternoon !== '请输入' && morning === afternoon) {
             schedule[date][morning].push({
@@ -599,7 +624,7 @@ export class ScheduleService {
           // 半天班次
           else {
             // 处理上午班次
-            if (morning !== '请输入') {
+            if (morning !== '请输入' && (!isWeekend || weekendDepartments.includes(morning))) {
               schedule[date][morning].push({
                 doctor: doctor,
                 shift: 'morning',
@@ -618,7 +643,7 @@ export class ScheduleService {
             }
 
             // 处理下午班次
-            if (afternoon !== '请输入') {
+            if (afternoon !== '请输入' && (!isWeekend || weekendDepartments.includes(afternoon))) {
               schedule[date][afternoon].push({
                 doctor: doctor,
                 shift: 'afternoon',
@@ -665,12 +690,7 @@ export class ScheduleService {
         }
       }
 
-      // 判断是否是周末（周六或周日）
-      const dateObj = new Date(date)
-      const dayOfWeek = dateObj.getDay()
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 // 0是周日，6是周六
-
-      // 周末只排3-4个科室，工作日排所有科室
+      // 🔴 CRITICAL: 周末只排前4个科室，工作日排所有科室
       let departmentsForDay = this.departments
       if (isWeekend) {
         departmentsForDay = this.departments.slice(0, 4) // 只排前4个科室
