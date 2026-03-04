@@ -206,6 +206,9 @@ export class ScheduleService {
       getFixedAssignment
     )
 
+    // 🔴 CRITICAL: 检查值班医生是否在固定排班中被设置为休息，如果是则重新选择
+    this.validateAndAdjustDutyDoctors(dates, dutySchedule, fixedSchedule, doctorSchedule)
+
     // 步骤2：分配白班（逐日处理）
     console.log('开始分配白班...')
     this.assignDayShifts(
@@ -469,11 +472,77 @@ export class ScheduleService {
       // 🔴 CRITICAL: 设置该医生不能值班的剩余天数为1
       doctorDutyBlockDays[selectedDoctor] = 1
       console.log(`${date} 夜班医生 ${selectedDoctor}，接下来1天不能值班`)
-
-      doctorIndex++
     })
 
     console.log('🔴 值班分配完成')
+  }
+
+  /**
+   * 验证并调整值班医生：检查值班医生是否在固定排班中被设置为休息，如果是则重新选择
+   */
+  private validateAndAdjustDutyDoctors(
+    dates: string[],
+    dutySchedule: Record<string, string>,
+    fixedSchedule: FixedSchedule | undefined,
+    doctorSchedule: Record<string, DoctorSchedule>
+  ): void {
+    let hasAdjustment = false
+
+    for (let i = 0; i < dates.length; i++) {
+      const date = dates[i]
+      const dutyDoctor = dutySchedule[date]
+
+      if (!dutyDoctor) continue
+
+      // 检查值班医生在固定排班中是否被设置为休息或请假
+      const fixed = fixedSchedule?.[date]?.[dutyDoctor]
+      if (fixed) {
+        const isRest = fixed.morning === '休息' || fixed.afternoon === '休息'
+        const isLeave = fixed.morning === '请假' || fixed.afternoon === '请假'
+
+        if (isRest || isLeave) {
+          console.log(`⚠️ ${date} 值班医生 ${dutyDoctor} 在固定排班中被设置为${isRest ? '休息' : '请假'}，需要重新选择`)
+
+          // 移除原来的夜班标记
+          delete doctorSchedule[dutyDoctor].nightShiftsByDate[date]
+          doctorSchedule[dutyDoctor].nightShifts--
+
+          // 重新选择值班医生（排除已休息或请假的医生）
+          const availableDoctors = Object.keys(doctorSchedule).filter(doctor => {
+            // 排除原来的值班医生
+            if (doctor === dutyDoctor) return false
+
+            // 排除固定排班中休息或请假的医生
+            const fixed = fixedSchedule?.[date]?.[doctor]
+            if (fixed && (fixed.morning === '休息' || fixed.afternoon === '休息' || fixed.morning === '请假' || fixed.afternoon === '请假')) {
+              return false
+            }
+
+            // 排除当天已经有夜班的医生
+            return !doctorSchedule[doctor].nightShiftsByDate[date]
+          })
+
+          if (availableDoctors.length === 0) {
+            throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假或处于值班休息期）`)
+          }
+
+          // 选择优先级最低的医生（选择轮到的人）
+          const newDutyDoctor = availableDoctors[0]
+          console.log(`✅ ${date} 重新选择值班医生: ${newDutyDoctor}`)
+
+          // 更新值班医生
+          dutySchedule[date] = newDutyDoctor
+          doctorSchedule[newDutyDoctor].nightShiftsByDate[date] = true
+          doctorSchedule[newDutyDoctor].nightShifts++
+
+          hasAdjustment = true
+        }
+      }
+    }
+
+    if (hasAdjustment) {
+      console.log('✅ 值班医生调整完成')
+    }
   }
 
   /**
@@ -517,8 +586,43 @@ export class ScheduleService {
 
       console.log(`🔴 ${date} 是否是周末: ${isWeekend}, 科室数量: ${departmentsForDay.length}`)
 
-      // 🔴 CRITICAL: 为每个医生每天分配一次，分阶段处理
+      // 🔴 CRITICAL: 优先处理值班医生，确保值班医生有白班
+      const dutyDoctor = dutySchedule[date]
+      if (dutyDoctor && !this.isAssigned(dutyDoctor, date, doctorSchedule)) {
+        // 检查值班医生是否前一天值班（应该不会，因为值班医生第二天必须休息）
+        if (this.isDutyYesterday(dutyDoctor, date, dutySchedule, dates, dateIndex)) {
+          this.setRest(dutyDoctor, date, doctorSchedule)
+          console.log(`${date} 值班医生 ${dutyDoctor} 前一天值班，设置休息`)
+        } else {
+          // 检查值班医生是否有固定排班
+          const fixedAssignment = getFixedAssignment(dutyDoctor, date)
+          if (fixedAssignment) {
+            this.applyFixedSchedule(
+              dutyDoctor,
+              date,
+              fixedAssignment,
+              schedule,
+              doctorSchedule,
+              dutyDoctor,
+              isWeekend,
+              departmentsForDay
+            )
+            console.log(`${date} 值班医生 ${dutyDoctor} 应用固定排班`)
+          } else {
+            // 值班医生分配到第一个可用科室
+            this.assignDutyDoctor(dutyDoctor, date, schedule, doctorSchedule, departmentsForDay)
+            console.log(`${date} 值班医生 ${dutyDoctor} 分配科室`)
+          }
+        }
+      }
+
+      // 🔴 CRITICAL: 为其他医生每天分配一次，分阶段处理
       for (const doctor of availableDoctors) {
+        // 跳过值班医生（已处理）
+        if (doctor === dutyDoctor) {
+          continue
+        }
+
         // 检查医生是否已分配（有工作或休息）
         if (this.isAssigned(doctor, date, doctorSchedule)) {
           console.log(`${date} ${doctor} 已分配，跳过`)
@@ -541,7 +645,7 @@ export class ScheduleService {
             fixedAssignment,
             schedule,
             doctorSchedule,
-            dutySchedule[date],
+            dutyDoctor,
             isWeekend,
             departmentsForDay
           )
@@ -549,14 +653,7 @@ export class ScheduleService {
           continue
         }
 
-        // 阶段3：检查是否值班医生，如果是，分配到可用科室
-        if (dutySchedule[date] === doctor) {
-          this.assignDutyDoctor(doctor, date, schedule, doctorSchedule, departmentsForDay)
-          console.log(`${date} ${doctor} 值班医生，分配科室`)
-          continue
-        }
-
-        // 阶段4：自动填充，选择科室分配
+        // 阶段3：自动填充，选择科室分配
         this.autoFill(doctor, date, schedule, doctorSchedule, departmentsForDay, doctorWorkDays, doctorDailyWork)
         console.log(`${date} ${doctor} 自动填充`)
       }
@@ -733,12 +830,20 @@ export class ScheduleService {
       }
     }
 
-    // 验证2：值班医生必须有白班
+    // 🔴 CRITICAL: 验证2：值班医生必须有白班（除非前一天值班，第二天必须休息）
     const dutyDoctor = dutySchedule[date]
     if (dutyDoctor) {
-      const shift = doctorSchedule[dutyDoctor]?.shifts[date]
-      if (!shift || (shift.morning !== 'work' && shift.afternoon !== 'work')) {
-        throw new Error(`${date} 值班医生 ${dutyDoctor} 没有白班`)
+      const dateIndex = dates.indexOf(date)
+      const isDutyYesterday = dateIndex > 0 && dutySchedule[dates[dateIndex - 1]] === dutyDoctor
+
+      // 如果值班医生前一天值班，第二天必须休息，不需要白班
+      if (!isDutyYesterday) {
+        const shift = doctorSchedule[dutyDoctor]?.shifts[date]
+        if (!shift || (shift.morning !== 'work' && shift.afternoon !== 'work')) {
+          throw new Error(`${date} 值班医生 ${dutyDoctor} 没有白班`)
+        }
+      } else {
+        console.log(`  ${date} 值班医生 ${dutyDoctor} 前一天值班，第二天必须休息，跳过白班验证`)
       }
     }
 
