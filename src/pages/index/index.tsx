@@ -137,8 +137,8 @@ const IndexPage = () => {
           afternoon: 'off'
         }
         doctorSchedule[doctor].departmentsByDate[date] = {
-          morning: '请输入',
-          afternoon: '请输入'
+          morning: '',
+          afternoon: ''
         }
       })
     })
@@ -171,7 +171,7 @@ const IndexPage = () => {
     }
 
     setEditingCell({ type: 'doctor', key1: doctor, key2: date })
-    const dept = (schedule as any)?.departmentsByDate?.[date]?.morning || '请输入'
+    const dept = (schedule as any)?.departmentsByDate?.[date]?.morning || ''
     setSelectedDepartment(dept)
     setSelectedShiftType('full')
     setShowCellEditModal(true)
@@ -250,36 +250,36 @@ const IndexPage = () => {
       }
 
       // 从科室排班表中移除上下午
-      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假') {
+      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '') {
         newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
           slot => slot.doctor !== doctor || slot.shift === 'afternoon'
         )
       }
-      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假') {
+      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '') {
         newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
           slot => slot.doctor !== doctor || slot.shift === 'morning'
         )
       }
 
       // 请假不更新休息天数（额外休息，不算在每周一天的休息要求中）
-    } else if (department === '请输入') {
-      // 清空科室设置（不限制）
+    } else if (department === '休息') {
+      // 设置休息
       doctorInfo.shifts[date] = {
         morning: 'off',
         afternoon: 'off'
       }
       ;(doctorInfo as any).departmentsByDate[date] = {
-        morning: '请输入',
-        afternoon: '请输入'
+        morning: '休息',
+        afternoon: '休息'
       }
 
       // 从科室排班表中移除上下午
-      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '请输入') {
+      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '') {
         newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
           slot => slot.doctor !== doctor || slot.shift === 'afternoon'
         )
       }
-      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '请输入') {
+      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '') {
         newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
           slot => slot.doctor !== doctor || slot.shift === 'morning'
         )
@@ -393,8 +393,8 @@ const IndexPage = () => {
 
       // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
       const fixedSchedule: Record<string, Record<string, {
-        morning: string | '请输入' | '休息' | '请假'
-        afternoon: string | '请输入' | '休息' | '请假'
+        morning: string | '休息' | '请假'
+        afternoon: string | '休息' | '请假'
       }>> = {}
 
       // 遍历医生排班表，提取每个医生每天的固定排班
@@ -407,14 +407,14 @@ const IndexPage = () => {
           const dept = departmentsByDate[date]
 
           // 只保留有固定排班的日期（包括休息、请假）
-          if (shift && dept && (dept.morning !== '请输入' || dept.afternoon !== '请输入')) {
+          if (shift && dept && (dept.morning !== '' || dept.afternoon !== '')) {
             if (!fixedSchedule[date]) {
               fixedSchedule[date] = {}
             }
 
             fixedSchedule[date][doctor] = {
-              morning: dept.morning === '请输入' ? '休息' : dept.morning,
-              afternoon: dept.afternoon === '请输入' ? '休息' : dept.afternoon
+              morning: dept.morning || '休息',
+              afternoon: dept.afternoon || '休息'
             }
           }
         })
@@ -422,13 +422,22 @@ const IndexPage = () => {
 
       console.log('固定排班数据:', fixedSchedule)
 
+      // 🔴 CRITICAL: 从 scheduleData 中提取医生列表和科室列表
+      const doctorNames = Object.keys(scheduleData.doctorSchedule)
+      const departmentNames = scheduleData.departments || []
+
+      console.log('传递给后端的医生列表:', doctorNames)
+      console.log('传递给后端的科室列表:', departmentNames)
+
       const res = await Network.request({
         url: '/api/schedule/generate',
         method: 'POST',
         data: {
           startDate,
           dutyStartDoctor,
-          fixedSchedule
+          fixedSchedule,
+          doctors: doctorNames,
+          departmentNames: departmentNames
         }
       })
       console.log('排班生成响应:', res.data)
@@ -634,7 +643,7 @@ const IndexPage = () => {
                       </View>
                       {scheduleData.dates.map((date) => {
                         const shifts = schedule?.shifts[date] || { morning: 'off', afternoon: 'off' }
-                        const departments = (schedule as any)?.departmentsByDate?.[date] || { morning: '请输入', afternoon: '请输入' }
+                        const departments = (schedule as any)?.departmentsByDate?.[date] || { morning: '', afternoon: '' }
                         const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
                         
                         let shiftText = ''
@@ -659,9 +668,9 @@ const IndexPage = () => {
                             } else if (morningDept === '请假' && afternoonDept === '请假') {
                               shiftText = '请假'
                               shiftColor = 'text-orange-600'
-                            } else if (morningDept === '请输入' && afternoonDept === '请输入') {
-                              shiftText = '请输入'
-                              shiftColor = 'text-gray-300'
+                            } else if (morningDept === '' && afternoonDept === '') {
+                              shiftText = '休息'
+                              shiftColor = 'text-gray-400'
                             } else {
                               // 混合状态（如上午休息，下午请假等）
                               shiftText = `${morningDept}\n${afternoonDept}`
@@ -928,19 +937,11 @@ const IndexPage = () => {
               </Text>
               <View className="flex flex-col gap-2">
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '请输入' ? 'bg-gray-50 border-gray-500' : 'border-gray-300'}`}
-                  onTap={() => handleDepartmentSelect('请输入')}
-                >
-                  <Text className={`block text-sm ${selectedDepartment === '请输入' ? 'text-gray-600 font-medium' : 'text-gray-600'}`}>
-                    请输入（不限制）
-                  </Text>
-                </View>
-                <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
                   onTap={() => handleDepartmentSelect('休息')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                    休息（算在每周一天的休息要求中）
+                    休息
                   </Text>
                 </View>
                 <View
@@ -948,7 +949,7 @@ const IndexPage = () => {
                   onTap={() => handleDepartmentSelect('请假')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '请假' ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
-                    请假（额外休息，不算在每周一天的休息要求中）
+                    请假
                   </Text>
                 </View>
                 {DEPARTMENTS.map((dept) => (

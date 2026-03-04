@@ -136,11 +136,13 @@ export class ScheduleService {
       return true
     })
 
+    console.log('🔴🔴🔴 availableDoctors:', availableDoctors)
+    console.log('🔴🔴🔴 availableDoctors.length:', availableDoctors.length)
+    console.log('🔴🔴🔴 doctorList:', doctorList)
+
     if (availableDoctors.length === 0) {
       throw new BadRequestException('没有可用的医生进行排班')
     }
-
-    const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
 
     // 🔴 CRITICAL: 使用用户传入的科室列表，如果没有则使用默认科室
     const departments = departmentNames && departmentNames.length > 0
@@ -148,6 +150,40 @@ export class ScheduleService {
       : this.departments
 
     console.log('🔴🔴🔴 使用的科室列表:', departments)
+    console.log('🔴🔴🔴 可用医生列表:', availableDoctors)
+    console.log('🔴🔴🔴 可用医生数量:', availableDoctors.length)
+    console.log('🔴🔴🔴 总医生数量:', doctorList.length)
+    console.log('🔴🔴🔴 排班日期数量:', dates.length)
+
+    // 🔴 CRITICAL: 验证医生数量是否足够
+    // 每天需要 departments.length × 2 个班次（上午和下午）
+    // 值班医生第二天休息，值班周期 2 天
+    // 在 2 天的值班周期中：
+    //   - 第一天：值班医生工作 2 个班次，其他医生也工作
+    //   - 第二天：值班医生休息，其他医生工作
+    // 平均每天需要的医生数量 = ceil(2 × departments.length / 3)
+    // 解释：
+    //   - 每天需要 2 × departments.length 个班次
+    //   - 值班周期 2 天中，值班医生只工作第一天（2 个班次），平均每天贡献 1 个班次
+    //   - 所以 N 个医生在 2 天周期中可提供 2N - 1 个班次
+    //   - 需要 2N - 1 >= 4 × departments.length
+    //   - 即 N >= ceil(2 × departments.length / 3)
+    // 最少医生数量 = ceil(2 × departments.length / 3) + 1（+1 是值班医生）
+    const avgDoctorsNeeded = Math.ceil(2 * departments.length / 3)
+    const minDoctorsNeeded = avgDoctorsNeeded + 1
+
+    console.log('🔴🔴🔴 平均每天需要的医生数量:', avgDoctorsNeeded)
+    console.log('🔴🔴🔴 最少需要的医生数量:', minDoctorsNeeded)
+
+    if (availableDoctors.length < minDoctorsNeeded) {
+      throw new BadRequestException(
+        `医生数量不足！${departments.length}个科室每天需要${departments.length * 2}个班次，` +
+        `值班医生第二天休息，至少需要${minDoctorsNeeded}个医生（平均每天${avgDoctorsNeeded}个），` +
+        `当前只有${availableDoctors.length}个可用医生。`
+      )
+    }
+
+    const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
 
     // 初始化排班表结构
     const schedule: Record<string, Record<string, ScheduleSlot[]>> = {}
