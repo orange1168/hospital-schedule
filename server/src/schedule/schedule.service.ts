@@ -701,32 +701,46 @@ export class ScheduleService {
       if (todayDutyDoctor && !doctorSchedule[todayDutyDoctor].shifts[date]) {
         // 检查值班医生是否有固定排班（科室、休息、请假）
         const fixedAssignment = getFixedAssignment(todayDutyDoctor, date)
-        const hasFixedSchedule = fixedAssignment && 
+        const hasFixedSchedule = fixedAssignment &&
                                 (fixedAssignment.morning !== '请输入' || fixedAssignment.afternoon !== '请输入')
-        
+
         // 只有当值班医生没有固定排班时，才为其分配科室
         if (!hasFixedSchedule) {
-          const firstDepartment = departmentsForDay[0]
-          console.log(`🔴 ${date} 优先为值班医生 ${todayDutyDoctor} 分配到 ${firstDepartment}`)
+          // 🔴 CRITICAL: 找到第一个没有被分配的科室，避免与固定排班冲突
+          let availableDepartment = ''
+          for (const dept of departmentsForDay) {
+            if (schedule[date][dept].length === 0) {
+              availableDepartment = dept
+              break
+            }
+          }
 
-          schedule[date][firstDepartment].push({
-            doctor: todayDutyDoctor,
-            shift: 'morning',
-            department: firstDepartment
-          })
-          schedule[date][firstDepartment].push({
-            doctor: todayDutyDoctor,
-            shift: 'afternoon',
-            department: firstDepartment
-          })
+          // 如果所有科室都已经被分配（不太可能），则跳过值班医生分配
+          if (!availableDepartment) {
+            console.log(`🔴 ${date} 所有科室都已被分配，跳过值班医生 ${todayDutyDoctor} 的科室分配`)
+            fixedAssignedDoctors.add(todayDutyDoctor)
+          } else {
+            console.log(`🔴 ${date} 优先为值班医生 ${todayDutyDoctor} 分配到 ${availableDepartment}`)
 
-          doctorSchedule[todayDutyDoctor].shifts[date] = { morning: 'work', afternoon: 'work' }
-          doctorSchedule[todayDutyDoctor].departmentsByDate[date] = { morning: firstDepartment, afternoon: firstDepartment }
-          doctorSchedule[todayDutyDoctor].morningShifts.push(firstDepartment)
-          doctorSchedule[todayDutyDoctor].afternoonShifts.push(firstDepartment)
-          
-          // 将值班医生加入 fixedAssignedDoctors，避免重复分配
-          fixedAssignedDoctors.add(todayDutyDoctor)
+            schedule[date][availableDepartment].push({
+              doctor: todayDutyDoctor,
+              shift: 'morning',
+              department: availableDepartment
+            })
+            schedule[date][availableDepartment].push({
+              doctor: todayDutyDoctor,
+              shift: 'afternoon',
+              department: availableDepartment
+            })
+
+            doctorSchedule[todayDutyDoctor].shifts[date] = { morning: 'work', afternoon: 'work' }
+            doctorSchedule[todayDutyDoctor].departmentsByDate[date] = { morning: availableDepartment, afternoon: availableDepartment }
+            doctorSchedule[todayDutyDoctor].morningShifts.push(availableDepartment)
+            doctorSchedule[todayDutyDoctor].afternoonShifts.push(availableDepartment)
+
+            // 将值班医生加入 fixedAssignedDoctors，避免重复分配
+            fixedAssignedDoctors.add(todayDutyDoctor)
+          }
         } else {
           console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 已有固定排班，跳过科室分配`)
           // 即使有固定排班，也将值班医生加入 fixedAssignedDoctors，避免重复分配
