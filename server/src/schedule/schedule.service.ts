@@ -372,9 +372,8 @@ export class ScheduleService {
 
       dutySchedule[date] = selectedDoctor
       doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true // 标记有夜班
-      // 🔴 CRITICAL: 设置为全天值班，但 shifts[date] 对象中标记为 off（让白班分配时跳过）
-      doctorSchedule[selectedDoctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-      doctorSchedule[selectedDoctor].departmentsByDate[date] = { morning: '值班', afternoon: '值班' } // 记录为值班
+      // 🔴 CRITICAL: 不设置 shifts[date] 和 departmentsByDate[date]，让白班分配时自动填充
+      // 白班分配时，值班医生会被优先分配到第一个科室
       doctorSchedule[selectedDoctor].nightShifts++
 
       // 🔴 CRITICAL: 标记该医生不能在接下来2天内值班（至少休息2天）
