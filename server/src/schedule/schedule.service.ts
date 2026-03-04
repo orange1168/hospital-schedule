@@ -376,29 +376,19 @@ export class ScheduleService {
       // 白班分配时，值班医生会被优先分配到第一个科室
       doctorSchedule[selectedDoctor].nightShifts++
 
-      // 🔴 CRITICAL: 标记该医生不能在接下来2天内值班（至少休息2天）
-      // 第2天不能值班（休息）
+      // 🔴 CRITICAL: 标记该医生在第二天休息（值班后休息1天）
       if (index + 1 < dates.length) {
         const nextDate = dates[index + 1]
         if (!restDatesMap[nextDate]) {
           restDatesMap[nextDate] = new Set()
         }
         restDatesMap[nextDate].add(selectedDoctor)
-        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextDate} 强制休息（第1天）`)
-      }
-      // 第3天不能值班（休息）
-      if (index + 2 < dates.length) {
-        const nextNextDate = dates[index + 2]
-        if (!restDatesMap[nextNextDate]) {
-          restDatesMap[nextNextDate] = new Set()
-        }
-        restDatesMap[nextNextDate].add(selectedDoctor)
-        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextNextDate} 强制休息（第2天）`)
+        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextDate} 强制休息`)
       }
 
-      // 🔴 CRITICAL: 设置该医生不能值班的剩余天数为2
-      doctorDutyBlockDays[selectedDoctor] = 2
-      console.log(`${date} 夜班医生 ${selectedDoctor}，接下来2天不能值班`)
+      // 🔴 CRITICAL: 设置该医生不能值班的剩余天数为1
+      doctorDutyBlockDays[selectedDoctor] = 1
+      console.log(`${date} 夜班医生 ${selectedDoctor}，接下来1天不能值班`)
 
       doctorIndex++
     })
@@ -413,12 +403,8 @@ export class ScheduleService {
       const dutyDoctor = dutySchedule[date]
       if (dutyDoctor && index + 1 < dates.length) {
         const nextDate = dates[index + 1]
-        const nextNextDate = index + 2 < dates.length ? dates[index + 2] : null
-        console.log(`🔴 ${date} 值班医生 ${dutyDoctor}，应该休息的日期: ${nextDate}${nextNextDate ? ', ' + nextNextDate : ''}`)
+        console.log(`🔴 ${date} 值班医生 ${dutyDoctor}，应该休息的日期: ${nextDate}`)
         console.log(`  ${nextDate} restDatesMap: ${Array.from(restDatesMap[nextDate] || [])}`)
-        if (nextNextDate) {
-          console.log(`  ${nextNextDate} restDatesMap: ${Array.from(restDatesMap[nextNextDate] || [])}`)
-        }
       }
     })
   }
@@ -489,8 +475,16 @@ export class ScheduleService {
 
           // 如果上下午都是休息，标记为全天休息
           if (morning === '休息' && afternoon === '休息') {
-            doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-            console.log(`  ${date} ${doctor} 固定排班设置为休息`)
+            // 🔴 CRITICAL: 如果医生当天是值班医生，跳过休息设置（值班医生当天必须上班）
+            if (doctor === todayDutyDoctor) {
+              console.log(`  🔴 ${date} ${doctor} 是值班医生，跳过固定排班的休息设置`)
+              // 🔴 CRITICAL: 仍然将值班医生加入到 fixedAssignedDoctors 中，但标记为特殊状态
+              fixedAssignedDoctors.add(doctor)
+            } else {
+              doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+              console.log(`  ${date} ${doctor} 固定排班设置为休息`)
+              fixedAssignedDoctors.add(doctor)
+            }
           }
           // 如果上下午都是同一个科室，标记为全天工作
           else if (morning !== '休息' && afternoon !== '休息' && morning === afternoon) {
@@ -574,10 +568,11 @@ export class ScheduleService {
       const doctorsWorking = availableDoctors.filter(d =>
         !todayOff.has(d) &&
         !isDoctorOnLeave(d, date) &&
-        !fixedAssignedDoctors.has(d) // 🔴 排除有固定排班的医生
+        (!fixedAssignedDoctors.has(d) || d === todayDutyDoctor) // 🔴 排除有固定排班的医生，但值班医生除外
       )
 
       console.log(`${date} 可用医生: ${doctorsWorking.join(', ') || '无'}`)
+      console.log(`${date} fixedAssignedDoctors: ${Array.from(fixedAssignedDoctors).join(', ') || '无'}`)
 
       // 🔴 CRITICAL: 检查是否有值班医生在休息日被错误包含在工作列表中
       const dutyDoctor = dutySchedule[date]
