@@ -12,7 +12,15 @@ interface ScheduleData {
   dutySchedule: Record<string, string>
   doctorSchedule: Record<string, {
     name: string
-    shifts: Record<string, 'morning' | 'afternoon' | 'night' | 'off'>
+    shifts: Record<string, {
+      morning: 'work' | 'off' | 'night'
+      afternoon: 'work' | 'off' | 'night'
+    }>
+    nightShiftsByDate: Record<string, boolean>
+    departmentsByDate: {
+      morning: string
+      afternoon: string
+    }
     morningShifts: string[]
     afternoonShifts: string[]
     nightShifts: number
@@ -75,6 +83,7 @@ const IndexPage = () => {
   const [showCellEditModal, setShowCellEditModal] = useState(false)
   const [editingCell, setEditingCell] = useState<{ type: 'department' | 'doctor' | 'department_select_doctor'; key1: string; key2: string; key3?: string } | null>(null)
   const [selectedDepartment, setSelectedDepartment] = useState('')
+  const [selectedShiftType, setSelectedShiftType] = useState<'full' | 'morning' | 'afternoon'>('full')
 
   // 获取日期列表
   const getDates = (): string[] => {
@@ -125,14 +134,18 @@ const IndexPage = () => {
         departmentsByDate: {},
         morningShifts: [],
         afternoonShifts: [],
-        morningShiftDays: 0,
-        afternoonShiftDays: 0,
         nightShifts: 0,
         restDays: 0
       }
       dates.forEach(date => {
-        doctorSchedule[doctor].shifts[date] = 'off'
-        doctorSchedule[doctor].departmentsByDate[date] = '休息'
+        doctorSchedule[doctor].shifts[date] = {
+          morning: 'off',
+          afternoon: 'off'
+        }
+        doctorSchedule[doctor].departmentsByDate[date] = {
+          morning: '休息',
+          afternoon: '休息'
+        }
       })
     })
 
@@ -152,7 +165,6 @@ const IndexPage = () => {
     const schedule = scheduleData?.doctorSchedule[doctor]
     if (!schedule) return
 
-    const department = (schedule as any)?.departmentsByDate?.[date]
     const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
 
     // 值班医生不能修改
@@ -165,7 +177,9 @@ const IndexPage = () => {
     }
 
     setEditingCell({ type: 'doctor', key1: doctor, key2: date })
-    setSelectedDepartment(department || '休息')
+    const dept = (schedule as any)?.departmentsByDate?.[date]?.morning || '休息'
+    setSelectedDepartment(dept)
+    setSelectedShiftType('full')
     setShowCellEditModal(true)
   }
 
@@ -186,59 +200,97 @@ const IndexPage = () => {
     const doctor = editingCell.key1
     const date = editingCell.key2
     const doctorInfo = newScheduleData.doctorSchedule[doctor]
-    const oldShift = doctorInfo.shifts[date]
-    const oldDepartment = (doctorInfo as any).departmentsByDate[date]
+    const oldShifts = doctorInfo.shifts[date]
+    const oldDepartments = (doctorInfo as any).departmentsByDate[date]
 
     // 更新医生的排班信息
     if (department === '休息') {
-      doctorInfo.shifts[date] = 'off'
-      ;(doctorInfo as any).departmentsByDate[date] = '休息'
+      // 全天休息
+      doctorInfo.shifts[date] = {
+        morning: 'off',
+        afternoon: 'off'
+      }
+      ;(doctorInfo as any).departmentsByDate[date] = {
+        morning: '休息',
+        afternoon: '休息'
+      }
 
-      // 从科室排班表中移除
-      if (oldDepartment && oldDepartment !== '休息') {
-        newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
-          slot => slot.doctor !== doctor
+      // 从科室排班表中移除上下午
+      if (oldDepartments?.morning && oldDepartments.morning !== '休息') {
+        newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
+          slot => slot.doctor !== doctor || slot.shift === 'afternoon'
+        )
+      }
+      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息') {
+        newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
+          slot => slot.doctor !== doctor || slot.shift === 'morning'
         )
       }
 
       // 更新统计数据
-      if (oldShift === 'morning') {
-        ;(doctorInfo as any).morningShiftDays = Math.max(0, ((doctorInfo as any).morningShiftDays || 0) - 1)
-        ;(doctorInfo as any).afternoonShiftDays = Math.max(0, ((doctorInfo as any).afternoonShiftDays || 0) - 1)
-        doctorInfo.restDays = (doctorInfo.restDays || 0) + 1
+      if (oldShifts?.morning === 'work') {
+        doctorInfo.restDays = (doctorInfo.restDays || 0) + 0.5
+      }
+      if (oldShifts?.afternoon === 'work') {
+        doctorInfo.restDays = (doctorInfo.restDays || 0) + 0.5
       }
     } else {
-      doctorInfo.shifts[date] = 'morning'
-      ;(doctorInfo as any).departmentsByDate[date] = department
+      // 设置科室（根据选择的班次类型）
+      const isMorning = selectedShiftType === 'full' || selectedShiftType === 'morning'
+      const isAfternoon = selectedShiftType === 'full' || selectedShiftType === 'afternoon'
 
-      // 更新科室排班表
-      if (oldDepartment && oldDepartment !== '休息' && oldDepartment !== department) {
-        // 从旧科室移除
-        newScheduleData.schedule[date][oldDepartment] = newScheduleData.schedule[date][oldDepartment].filter(
-          slot => slot.doctor !== doctor
-        )
+      if (isMorning) {
+        doctorInfo.shifts[date].morning = 'work'
+        ;(doctorInfo as any).departmentsByDate[date].morning = department
+
+        // 从旧科室移除上午班次
+        if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== department) {
+          newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
+            slot => !(slot.doctor === doctor && slot.shift === 'morning')
+          )
+        }
+
+        // 添加到新科室上午
+        const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor && s.shift === 'morning')
+        if (!existingSlot) {
+          newScheduleData.schedule[date][department].push({
+            doctor,
+            shift: 'morning',
+            department
+          })
+        }
+
+        // 更新统计数据
+        if (oldShifts?.morning !== 'work') {
+          doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 0.5)
+        }
       }
 
-      // 添加到新科室
-      const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor)
-      if (!existingSlot) {
-        newScheduleData.schedule[date][department].push({
-          doctor,
-          shift: 'morning',
-          department
-        })
-        newScheduleData.schedule[date][department].push({
-          doctor,
-          shift: 'afternoon',
-          department
-        })
-      }
+      if (isAfternoon) {
+        doctorInfo.shifts[date].afternoon = 'work'
+        ;(doctorInfo as any).departmentsByDate[date].afternoon = department
 
-      // 更新统计数据
-      if (oldShift === 'off' || !oldShift) {
-        ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
-        ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
-        doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
+        // 从旧科室移除下午班次
+        if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== department) {
+          newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
+            slot => !(slot.doctor === doctor && slot.shift === 'afternoon')
+          )
+        }
+
+        // 添加到新科室下午
+        const existingSlot = newScheduleData.schedule[date][department].find(s => s.doctor === doctor && s.shift === 'afternoon')
+        if (!existingSlot) {
+          newScheduleData.schedule[date][department].push({
+            doctor,
+            shift: 'afternoon',
+            department
+          })
+        }
+
+        // 更新统计数据
+        if (oldShifts?.afternoon !== 'work') {
+          doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 0.5)
+        }
       }
     }
 
@@ -246,6 +298,7 @@ const IndexPage = () => {
     setShowCellEditModal(false)
     setEditingCell(null)
     setSelectedDepartment('')
+    setSelectedShiftType('full')
 
     Taro.showToast({
       title: '修改成功',
@@ -661,21 +714,37 @@ const IndexPage = () => {
                         <Text className="block text-sm font-medium text-center">{doctor}</Text>
                       </View>
                       {scheduleData.dates.map((date) => {
-                        const shift = schedule?.shifts[date]
-                        const department = (schedule as any)?.departmentsByDate?.[date]
+                        const shifts = schedule?.shifts[date] || { morning: 'off', afternoon: 'off' }
+                        const departments = (schedule as any)?.departmentsByDate?.[date] || { morning: '休息', afternoon: '休息' }
                         const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
+                        
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'
 
                         if (hasNightShift) {
                           shiftText = '值班'
                           shiftColor = 'text-red-600'
-                        } else if (shift === 'morning') {
-                          shiftText = department || '休息'
-                          shiftColor = 'text-blue-600'
                         } else {
-                          shiftText = '休息'
-                          shiftColor = 'text-gray-400'
+                          // 上下午班次显示
+                          if (shifts.morning === 'off' && shifts.afternoon === 'off') {
+                            // 全天休息
+                            shiftText = '休息'
+                            shiftColor = 'text-gray-400'
+                          } else if (shifts.morning === 'work' && shifts.afternoon === 'work') {
+                            // 全天上班
+                            if (departments.morning === departments.afternoon) {
+                              shiftText = departments.morning
+                            } else {
+                              shiftText = `${departments.morning}\n${departments.afternoon}`
+                            }
+                            shiftColor = 'text-blue-600'
+                          } else {
+                            // 半天上班
+                            shiftText = shifts.morning === 'work' 
+                              ? `上午：${departments.morning}\n下午：休息`
+                              : `上午：休息\n下午：${departments.afternoon}`
+                            shiftColor = 'text-orange-600'
+                          }
                         }
 
                         return (
@@ -684,7 +753,7 @@ const IndexPage = () => {
                             className={`w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center ${!hasNightShift ? 'cursor-pointer active:bg-blue-50' : ''}`}
                             onTap={() => !hasNightShift && handleDoctorCellClick(doctor, date)}
                           >
-                            <Text className={`text-xs text-center ${shiftColor}`}>
+                            <Text className={`text-xs text-center whitespace-pre-line ${shiftColor}`}>
                               {shiftText}
                             </Text>
                           </View>
@@ -859,10 +928,44 @@ const IndexPage = () => {
       {/* 科室/休息选择弹窗（仅用于医生排班表） */}
       {showCellEditModal && editingCell && editingCell.type === 'doctor' && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <View className="bg-white rounded-lg p-6 mx-4 w-80">
+          <View className="bg-white rounded-lg p-6 mx-4 w-80 max-h-[80vh] overflow-y-auto">
             <Text className="block text-lg font-bold mb-4 text-center">
               设置排班
             </Text>
+            
+            {/* 班次类型选择 */}
+            <View className="mb-4">
+              <Text className="block text-sm text-gray-600 mb-2">
+                选择班次：
+              </Text>
+              <View className="flex flex-row gap-2">
+                <View
+                  className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'full' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                  onTap={() => setSelectedShiftType('full')}
+                >
+                  <Text className={`block text-sm ${selectedShiftType === 'full' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                    全天
+                  </Text>
+                </View>
+                <View
+                  className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'morning' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                  onTap={() => setSelectedShiftType('morning')}
+                >
+                  <Text className={`block text-sm ${selectedShiftType === 'morning' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                    上午
+                  </Text>
+                </View>
+                <View
+                  className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'afternoon' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                  onTap={() => setSelectedShiftType('afternoon')}
+                >
+                  <Text className={`block text-sm ${selectedShiftType === 'afternoon' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                    下午
+                  </Text>
+                </View>
+              </View>
+            </View>
+            
             <View className="mb-4">
               <Text className="block text-sm text-gray-600 mb-4">
                 选择科室或休息：
@@ -896,6 +999,7 @@ const IndexPage = () => {
                   setShowCellEditModal(false)
                   setEditingCell(null)
                   setSelectedDepartment('')
+                  setSelectedShiftType('full')
                 }}
               >
                 <Text className="block text-sm font-medium">取消</Text>
