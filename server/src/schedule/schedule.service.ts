@@ -11,8 +11,8 @@ const FIXED_DOCTORS = [
 export interface FixedSchedule {
   [date: string]: {
     [doctor: string]: {
-      morning: string | '请输入' | '休息' | '请假'
-      afternoon: string | '请输入' | '休息' | '请假'
+      morning: string | '休息' | '请假'
+      afternoon: string | '休息' | '请假'
     }
   }
 }
@@ -84,9 +84,11 @@ export class ScheduleService {
     doctors?: string[] | { name: string; isMainDuty?: boolean }[],
     dutyStartDoctor?: string,
     leaveDoctors?: string[] | LeaveInfo[],
-    fixedSchedule?: FixedSchedule
+    fixedSchedule?: FixedSchedule,
+    departmentNames?: string[] // 科室列表
   ): Promise<ScheduleData> {
     console.log('🔥 generateSchedule 被调用，startDate:', startDate)
+    console.log('🔥 科室列表:', departmentNames)
     console.log('🔥 固定排班数据:', fixedSchedule)
 
     // 将医生列表转换为字符串数组
@@ -140,11 +142,18 @@ export class ScheduleService {
 
     const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
 
+    // 🔴 CRITICAL: 使用用户传入的科室列表，如果没有则使用默认科室
+    const departments = departmentNames && departmentNames.length > 0
+      ? departmentNames
+      : this.departments
+
+    console.log('🔴🔴🔴 使用的科室列表:', departments)
+
     // 初始化排班表结构
     const schedule: Record<string, Record<string, ScheduleSlot[]>> = {}
     dates.forEach(date => {
       schedule[date] = {}
-      this.departments.forEach(dept => {
+      departments.forEach(dept => {
         schedule[date][dept] = []
       })
     })
@@ -177,8 +186,8 @@ export class ScheduleService {
 
     // 检查医生在固定排班中是否已分配（支持半天班次）
     const getFixedAssignment = (doctor: string, date: string): {
-      morning: string | '请输入' | '休息' | '请假'
-      afternoon: string | '请输入' | '休息' | '请假'
+      morning: string | '休息' | '请假'
+      afternoon: string | '休息' | '请假'
     } | null => {
       if (!fixedSchedule || !fixedSchedule[date] || !fixedSchedule[date][doctor]) {
         return null
@@ -218,7 +227,8 @@ export class ScheduleService {
       availableDoctors,
       doctorSchedule,
       isDoctorOnLeave,
-      getFixedAssignment
+      getFixedAssignment,
+      departments // 🔴 CRITICAL: 传递科室列表
     )
 
     // 步骤3：检查每个医生的休息天数
@@ -235,7 +245,7 @@ export class ScheduleService {
     return {
       dates,
       datesWithWeek,
-      departments: this.departments,
+      departments, // 🔴 CRITICAL: 使用实际的科室列表
       schedule,
       dutySchedule,
       doctorSchedule,
@@ -360,8 +370,8 @@ export class ScheduleService {
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
     getFixedAssignment: (doctor: string, date: string) => {
-      morning: string | '请输入' | '休息' | '请假'
-      afternoon: string | '请输入' | '休息' | '请假'
+      morning: string | '休息' | '请假'
+      afternoon: string | '休息' | '请假'
     } | null
   ): void {
     // 找到值班起始医生在 availableDoctors 中的索引
@@ -556,9 +566,10 @@ export class ScheduleService {
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
     getFixedAssignment: (doctor: string, date: string) => {
-      morning: string | '请输入' | '休息' | '请假'
-      afternoon: string | '请输入' | '休息' | '请假'
-    } | null
+      morning: string | '休息' | '请假'
+      afternoon: string | '休息' | '请假'
+    } | null,
+    departments: string[] // 🔴 CRITICAL: 添加科室列表参数
   ): void {
     // 记录每个医生的工作天数
     const doctorWorkDays: Record<string, number> = {}
@@ -582,7 +593,7 @@ export class ScheduleService {
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
 
       // 周末只排前4个科室，工作日排所有科室
-      const departmentsForDay = isWeekend ? this.departments.slice(0, 4) : this.departments
+      const departmentsForDay = isWeekend ? departments.slice(0, 4) : departments
 
       console.log(`🔴 ${date} 是否是周末: ${isWeekend}, 科室数量: ${departmentsForDay.length}`)
 
@@ -675,8 +686,8 @@ export class ScheduleService {
     doctor: string,
     date: string,
     fixedAssignment: {
-      morning: string | '请输入' | '休息' | '请假'
-      afternoon: string | '请输入' | '休息' | '请假'
+      morning: string | '休息' | '请假'
+      afternoon: string | '休息' | '请假'
     },
     schedule: Record<string, Record<string, ScheduleSlot[]>>,
     doctorSchedule: Record<string, DoctorSchedule>,
@@ -686,16 +697,10 @@ export class ScheduleService {
   ): void {
     const { morning, afternoon } = fixedAssignment
 
-    // 如果是值班医生，跳过固定排班
+    // 🔴 CRITICAL: 固定排班优先级最高，即使是值班医生也要应用
+    // 如果是值班医生，仍然应用固定排班
     if (dutyDoctor === doctor) {
-      console.log(`  ${date} ${doctor} 是值班医生，跳过固定排班`)
-      return
-    }
-
-    // 如果是"请输入"，跳过
-    if (morning === '请输入' && afternoon === '请输入') {
-      console.log(`  ${date} ${doctor} 固定排班为请输入，跳过`)
-      return
+      console.log(`  ${date} ${doctor} 是值班医生，但仍然应用固定排班`)
     }
 
     // 如果包含"请假"，设置为休息
@@ -732,8 +737,8 @@ export class ScheduleService {
 
     // 如果是科室，检查周末限制
     if (isWeekend) {
-      const morningInvalid = morning !== '请输入' && !departmentsForDay.includes(morning)
-      const afternoonInvalid = afternoon !== '请输入' && !departmentsForDay.includes(afternoon)
+      const morningInvalid = !departmentsForDay.includes(morning)
+      const afternoonInvalid = !departmentsForDay.includes(afternoon)
 
       if (morningInvalid || afternoonInvalid) {
         console.log(`  ${date} ${doctor} 固定排班不在周末前4个科室内，跳过`)
@@ -741,13 +746,13 @@ export class ScheduleService {
       }
     }
 
-    // 应用科室排班
-    if (morning !== '请输入') {
+    // 应用科室排班（morning 和 afternoon 都是科室名称）
+    if (morning !== '休息' && morning !== '请假') {
       this.setWork(doctor, date, morning, 'morning', schedule, doctorSchedule)
       console.log(`  ${date} ${doctor} 固定排班设置为上午 ${morning}`)
     }
 
-    if (afternoon !== '请输入') {
+    if (afternoon !== '休息' && afternoon !== '请假') {
       this.setWork(doctor, date, afternoon, 'afternoon', schedule, doctorSchedule)
       console.log(`  ${date} ${doctor} 固定排班设置为下午 ${afternoon}`)
     }

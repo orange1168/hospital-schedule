@@ -3,6 +3,7 @@ import { ScheduleService, FixedSchedule } from './schedule.service'
 
 interface GenerateScheduleDto {
   startDate: string
+  departmentNames?: string[] // 科室列表
   doctors?: string[]
   dutyStartDoctor?: string
   leaveRequests?: any[] // ✅ 修改：使用 leaveRequests 匹配前端
@@ -24,7 +25,7 @@ export class ScheduleController {
   @Post('generate')
   async generateSchedule(@Body() body: GenerateScheduleDto) {
     console.log('收到排班生成请求:', body)
-    const { startDate, doctors, dutyStartDoctor, leaveRequests, fixedSchedule } = body
+    const { startDate, departmentNames, doctors, dutyStartDoctor, leaveRequests, fixedSchedule } = body
 
     if (!startDate) {
       return {
@@ -40,7 +41,8 @@ export class ScheduleController {
         doctors,
         dutyStartDoctor,
         leaveRequests, // ✅ 修改：使用 leaveRequests
-        fixedSchedule // 固定排班数据
+        fixedSchedule, // 固定排班数据
+        departmentNames // 科室列表
       )
       console.log('排班生成成功:', scheduleData)
 
