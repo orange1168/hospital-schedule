@@ -1,4 +1,9 @@
-/* 优先使用 tailwindcss，如无必要请不要使用css */
+/* 全局样式重置 */
+page {
+  background-color: #f5f5f5;
+}
+
+/* 边框盒模型 */
 * {
   box-sizing: border-box;
 }
