@@ -594,16 +594,18 @@ const IndexPage = () => {
 
                         if (hasNightShift) {
                           // 获取值班医生当天的科室（值班医生在白天也有排班）
-                          const dutyDepartment = departments.morning || departments.afternoon || ''
-                          shiftText = dutyDepartment ? `${dutyDepartment}（值班）` : '值班'
+                          const dutyDepartment = departments.morning === '请输入' ? '休息' : departments.morning
+                          const dutyAfternoon = departments.afternoon === '请输入' ? '休息' : departments.afternoon
+                          const displayDept = dutyDepartment || dutyAfternoon || ''
+                          shiftText = displayDept ? `${displayDept}（值班）` : '值班'
                           shiftColor = 'text-red-600'
                         } else {
                           // 上下午班次显示
                           if (shifts.morning === 'off' && shifts.afternoon === 'off') {
                             // 全天休息
                             // 检查是否是"休息"或"请假"
-                            const morningDept = departments.morning
-                            const afternoonDept = departments.afternoon
+                            let morningDept = departments.morning === '请输入' ? '休息' : departments.morning
+                            let afternoonDept = departments.afternoon === '请输入' ? '休息' : departments.afternoon
                             
                             if (morningDept === '休息' && afternoonDept === '休息') {
                               shiftText = '休息'
@@ -621,17 +623,21 @@ const IndexPage = () => {
                             }
                           } else if (shifts.morning === 'work' && shifts.afternoon === 'work') {
                             // 全天上班
-                            if (departments.morning === departments.afternoon) {
-                              shiftText = departments.morning
+                            const morningDept = departments.morning === '请输入' ? '休息' : departments.morning
+                            const afternoonDept = departments.afternoon === '请输入' ? '休息' : departments.afternoon
+                            if (morningDept === afternoonDept) {
+                              shiftText = morningDept
                             } else {
-                              shiftText = `${departments.morning}\n${departments.afternoon}`
+                              shiftText = `${morningDept}\n${afternoonDept}`
                             }
                             shiftColor = 'text-blue-600'
                           } else {
                             // 半天上班
-                            shiftText = shifts.morning === 'work' 
-                              ? `上午：${departments.morning}\n下午：休息`
-                              : `上午：休息\n下午：${departments.afternoon}`
+                            const morningDept = departments.morning === '请输入' ? '休息' : departments.morning
+                            const afternoonDept = departments.afternoon === '请输入' ? '休息' : departments.afternoon
+                            shiftText = shifts.morning === 'work'
+                              ? `上午：${morningDept}\n下午：休息`
+                              : `上午：休息\n下午：${afternoonDept}`
                             shiftColor = 'text-orange-600'
                           }
                         }

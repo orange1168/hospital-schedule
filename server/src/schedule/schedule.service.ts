@@ -677,6 +677,51 @@ export class ScheduleService {
 
       console.log(`${date} (${isWeekend ? '周末' : '工作日'}) 需要排科室数量: ${departmentsForDay.length}`)
 
+      // 🔴 CRITICAL: 优先处理周末值班医生的科室分配
+      // 如果值班医生已经被固定排班分配到某个科室，但这个科室不在周末的4个科室中，则重新分配
+      if (isWeekend && todayDutyDoctor && doctorSchedule[todayDutyDoctor].shifts[date]?.morning === 'work') {
+        const currentDepartment = (doctorSchedule[todayDutyDoctor] as any).departmentsByDate[date]?.morning
+        if (currentDepartment && !departmentsForDay.includes(currentDepartment)) {
+          console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 被分配到 ${currentDepartment}，但周末不排该科室，需要重新分配`)
+
+          // 从旧科室移除值班医生
+          schedule[date][currentDepartment] = schedule[date][currentDepartment].filter(
+            slot => slot.doctor !== todayDutyDoctor
+          )
+
+          // 将值班医生分配到第一个科室（departmentsForDay[0]）
+          const newDepartment = departmentsForDay[0]
+          schedule[date][newDepartment].push({
+            doctor: todayDutyDoctor,
+            shift: 'morning',
+            department: newDepartment
+          })
+          schedule[date][newDepartment].push({
+            doctor: todayDutyDoctor,
+            shift: 'afternoon',
+            department: newDepartment
+          })
+
+          // 更新值班医生的科室
+          doctorSchedule[todayDutyDoctor].departmentsByDate[date] = {
+            morning: newDepartment,
+            afternoon: newDepartment
+          }
+
+          // 更新值班医生的班次列表
+          doctorSchedule[todayDutyDoctor].morningShifts = doctorSchedule[todayDutyDoctor].morningShifts.filter(
+            dept => dept !== currentDepartment
+          )
+          doctorSchedule[todayDutyDoctor].afternoonShifts = doctorSchedule[todayDutyDoctor].afternoonShifts.filter(
+            dept => dept !== currentDepartment
+          )
+          doctorSchedule[todayDutyDoctor].morningShifts.push(newDepartment)
+          doctorSchedule[todayDutyDoctor].afternoonShifts.push(newDepartment)
+
+          console.log(`  ${date} 值班医生 ${todayDutyDoctor} 重新分配到 ${newDepartment}`)
+        }
+      }
+
       // 🔴 CRITICAL: 记录已分配的科室（包括固定排班）
       const assignedDepartments = new Set<string>()
       for (const dept of departmentsForDay) {
