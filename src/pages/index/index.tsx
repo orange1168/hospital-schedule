@@ -349,20 +349,36 @@ const IndexPage = () => {
     try {
       console.log('开始自动填充排班，参数:', { startDate, dutyStartDoctor, leaveRecords, scheduleData })
 
-      // 将当前的固定排班转换为后端需要的格式
-      const fixedSchedule: Record<string, Record<string, string>> = {}
-      Object.entries(scheduleData.schedule).forEach(([date, deptSchedule]) => {
-        Object.entries(deptSchedule).forEach(([dept, slots]) => {
-          slots.forEach(slot => {
-            if (slot.shift === 'morning' || slot.shift === 'afternoon') {
-              if (!fixedSchedule[date]) {
-                fixedSchedule[date] = {}
-              }
-              fixedSchedule[date][slot.doctor] = dept
+      // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
+      const fixedSchedule: Record<string, Record<string, {
+        morning: string | '休息'
+        afternoon: string | '休息'
+      }>> = {}
+
+      // 遍历医生排班表，提取每个医生每天的固定排班
+      Object.entries(scheduleData.doctorSchedule).forEach(([doctor, doctorInfo]) => {
+        const shifts = doctorInfo.shifts
+        const departmentsByDate = (doctorInfo as any).departmentsByDate
+
+        Object.keys(shifts).forEach(date => {
+          const shift = shifts[date]
+          const dept = departmentsByDate[date]
+
+          // 只保留有排班的日期（非空）
+          if (shift && (shift.morning !== 'off' || shift.afternoon !== 'off')) {
+            if (!fixedSchedule[date]) {
+              fixedSchedule[date] = {}
             }
-          })
+
+            fixedSchedule[date][doctor] = {
+              morning: shift.morning === 'work' ? (dept?.morning || '休息') : '休息',
+              afternoon: shift.afternoon === 'work' ? (dept?.afternoon || '休息') : '休息'
+            }
+          }
         })
       })
+
+      console.log('固定排班数据:', fixedSchedule)
 
       const res = await Network.request({
         url: '/api/schedule/generate',
