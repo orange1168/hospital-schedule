@@ -675,12 +675,11 @@ export class ScheduleService {
         departmentsForDay = this.departments.slice(0, 4) // 只排前4个科室
       }
 
-      console.log(`${date} (${isWeekend ? '周末' : '工作日'}) 需要排科室数量: ${departmentsForDay.length}`)
-
-      // 🔴 CRITICAL: 周末优先为值班医生分配第一个诊室
-      if (isWeekend && todayDutyDoctor && !doctorSchedule[todayDutyDoctor].shifts[date]) {
+      // 🔴 CRITICAL: 固定排班处理完成后，优先为值班医生分配科室
+      // 值班医生的科室分配是最高优先级的
+      if (todayDutyDoctor && !doctorSchedule[todayDutyDoctor].shifts[date]) {
         const firstDepartment = departmentsForDay[0]
-        console.log(`🔴 ${date} 周末优先为值班医生 ${todayDutyDoctor} 分配到 ${firstDepartment}`)
+        console.log(`🔴 ${date} 优先为值班医生 ${todayDutyDoctor} 分配到 ${firstDepartment}`)
 
         schedule[date][firstDepartment].push({
           doctor: todayDutyDoctor,
@@ -697,6 +696,9 @@ export class ScheduleService {
         doctorSchedule[todayDutyDoctor].departmentsByDate[date] = { morning: firstDepartment, afternoon: firstDepartment }
         doctorSchedule[todayDutyDoctor].morningShifts.push(firstDepartment)
         doctorSchedule[todayDutyDoctor].afternoonShifts.push(firstDepartment)
+        
+        // 将值班医生加入 fixedAssignedDoctors，避免重复分配
+        fixedAssignedDoctors.add(todayDutyDoctor)
       }
 
       // 🔴 CRITICAL: 记录已分配的科室（包括固定排班）
