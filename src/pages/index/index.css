@@ -1,1 +1,4 @@
 /* 优先使用 tailwindcss，如无必要请不要使用css */
+* {
+  box-sizing: border-box;
+}

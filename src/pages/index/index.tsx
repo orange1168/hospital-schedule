@@ -656,7 +656,6 @@ const IndexPage = () => {
               <ScrollView
                 scrollX
                 className="flex-1"
-                style={{ width: 'calc(100% - 6rem)' }}
               >
                 <View className="min-w-max">
                   {/* 表头 */}
@@ -735,7 +734,6 @@ const IndexPage = () => {
               <ScrollView
                 scrollX
                 className="flex-1"
-                style={{ width: 'calc(100% - 6rem)' }}
               >
                 <View className="min-w-max">
                   {/* 表头 */}
