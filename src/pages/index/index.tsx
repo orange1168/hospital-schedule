@@ -641,7 +641,7 @@ const IndexPage = () => {
               <View className="min-w-max">
                 {/* 表头 */}
                 <View className="flex flex-row">
-                  <View className="w-24 bg-purple-50 p-2 border border-gray-200">
+                  <View className="w-24 bg-purple-50 p-2 border border-gray-200" style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#f5f3ff' }}>
                     <Text className="block text-sm font-bold text-center">医生</Text>
                   </View>
                   {scheduleData.dates.map((date, index) => (
@@ -657,7 +657,7 @@ const IndexPage = () => {
                   const schedule = scheduleData.doctorSchedule[doctor]
                   return (
                     <View key={doctor} className="flex flex-row">
-                      <View className="w-24 bg-gray-50 p-2 border border-gray-200">
+                      <View className="w-24 bg-gray-50 p-2 border border-gray-200" style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#f9fafb' }}>
                         <Text className="block text-sm font-medium text-center">{doctor}</Text>
                       </View>
                       {scheduleData.dates.map((date) => {
