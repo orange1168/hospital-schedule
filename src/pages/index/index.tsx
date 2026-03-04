@@ -637,142 +637,148 @@ const IndexPage = () => {
           <Text className="block text-lg font-bold mb-3">医生排班表</Text>
           <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
             <Text className="block text-sm text-gray-500 mb-2">点击单元格设置科室或休息</Text>
-
-            {/* 表头 */}
-            <View className="flex flex-row mb-1">
-              {/* 固定列：医生 */}
-              <View style={{ width: '96px', flexShrink: 0, height: '50px', backgroundColor: '#f5f3ff', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Text className="block text-sm font-bold text-center">医生</Text>
+            <View className="flex flex-row">
+              {/* 固定列：医生姓名 */}
+              <View className="w-24 flex-shrink-0">
+                {/* 表头 */}
+                <View className="w-24 bg-purple-50 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                  <Text className="block text-sm font-bold text-center">医生</Text>
+                </View>
+                {/* 表格内容 */}
+                {FIXED_DOCTORS.map((doctor) => (
+                  <View key={doctor} className="w-24 bg-gray-50 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                    <Text className="block text-sm font-medium text-center">{doctor}</Text>
+                  </View>
+                ))}
               </View>
-              {/* 可滚动列：日期 */}
+
+              {/* 可滚动列：日期和排班内容 */}
               <ScrollView scrollX className="flex-1">
-                <View style={{ display: 'flex', flexDirection: 'row' }}>
-                  {scheduleData.dates.map((date, index) => (
-                    <View key={date} style={{ width: '96px', height: '50px', backgroundColor: '#f5f3ff', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
-                      <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
-                    </View>
-                  ))}
+                <View className="min-w-max">
+                  {/* 表头 */}
+                  <View className="flex flex-row">
+                    {scheduleData.dates.map((date, index) => (
+                      <View key={date} className="w-24 bg-purple-50 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                        <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
+                        <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* 表格内容 */}
+                  {FIXED_DOCTORS.map((doctor) => {
+                    const schedule = scheduleData.doctorSchedule[doctor]
+                    return (
+                      <View key={doctor} className="flex flex-row">
+                        {scheduleData.dates.map((date) => {
+                          const shift = schedule?.shifts[date]
+                          const department = (schedule as any)?.departmentsByDate?.[date]
+                          const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
+                          let shiftText = ''
+                          let shiftColor = 'text-gray-400'
+
+                          if (hasNightShift) {
+                            shiftText = '值班'
+                            shiftColor = 'text-red-600'
+                          } else if (shift === 'morning') {
+                            shiftText = department || '休息'
+                            shiftColor = 'text-blue-600'
+                          } else {
+                            shiftText = '休息'
+                            shiftColor = 'text-gray-400'
+                          }
+
+                          return (
+                            <View
+                              key={date}
+                              className={`w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center ${!hasNightShift ? 'cursor-pointer active:bg-blue-50' : ''}`}
+                              onTap={() => !hasNightShift && handleDoctorCellClick(doctor, date)}
+                            >
+                              <Text className={`text-xs text-center ${shiftColor}`}>
+                                {shiftText}
+                              </Text>
+                            </View>
+                          )
+                        })}
+                      </View>
+                    )
+                  })}
                 </View>
               </ScrollView>
             </View>
-
-            {/* 表格内容 */}
-            {FIXED_DOCTORS.map((doctor) => {
-              const schedule = scheduleData.doctorSchedule[doctor]
-              return (
-                <View key={doctor} className="flex flex-row mb-1">
-                  {/* 固定列：医生姓名 */}
-                  <View style={{ width: '96px', flexShrink: 0, height: '50px', backgroundColor: '#f9fafb', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text className="block text-sm font-medium text-center">{doctor}</Text>
-                  </View>
-                  {/* 可滚动列：排班内容 */}
-                  <ScrollView scrollX className="flex-1">
-                    <View style={{ display: 'flex', flexDirection: 'row' }}>
-                      {scheduleData.dates.map((date) => {
-                        const shift = schedule?.shifts[date]
-                        const department = (schedule as any)?.departmentsByDate?.[date]
-                        const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
-                        let shiftText = ''
-                        let shiftColor = 'text-gray-400'
-
-                        if (hasNightShift) {
-                          shiftText = '值班'
-                          shiftColor = 'text-red-600'
-                        } else if (shift === 'morning') {
-                          shiftText = department || '休息'
-                          shiftColor = 'text-blue-600'
-                        } else {
-                          shiftText = '休息'
-                          shiftColor = 'text-gray-400'
-                        }
-
-                        return (
-                          <View
-                            key={date}
-                            style={{ width: '96px', height: '50px', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: hasNightShift ? '#ffffff' : '#ffffff' }}
-                            onTap={() => !hasNightShift && handleDoctorCellClick(doctor, date)}
-                          >
-                            <Text className={`text-xs text-center ${shiftColor}`}>
-                              {shiftText}
-                            </Text>
-                          </View>
-                        )
-                      })}
-                    </View>
-                  </ScrollView>
-                </View>
-              )
-            })}
           </View>
 
           {/* 科室排班表（只展示） */}
           <Text className="block text-lg font-bold mb-3 mt-6">科室排班表</Text>
           <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
             <Text className="block text-sm text-gray-500 mb-2">根据医生排班自动生成，不可编辑</Text>
-
-            {/* 表头 */}
-            <View className="flex flex-row mb-1">
-              {/* 固定列：科室 */}
-              <View style={{ width: '96px', flexShrink: 0, height: '50px', backgroundColor: '#eff6ff', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Text className="block text-sm font-bold text-center">科室</Text>
+            <View className="flex flex-row">
+              {/* 固定列：科室名称 */}
+              <View className="w-24 flex-shrink-0">
+                {/* 表头 */}
+                <View className="w-24 bg-blue-50 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
+                  <Text className="block text-sm font-bold text-center">科室</Text>
+                </View>
+                {/* 表格内容 */}
+                {scheduleData.departments.map((department) => (
+                  <View key={department} className="w-24 bg-gray-50 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
+                    <Text className="block text-sm font-medium text-center">{department}</Text>
+                  </View>
+                ))}
               </View>
-              {/* 可滚动列：日期 */}
+
+              {/* 可滚动列：日期和排班内容 */}
               <ScrollView scrollX className="flex-1">
-                <View style={{ display: 'flex', flexDirection: 'row' }}>
-                  {scheduleData.dates.map((date, index) => (
-                    <View key={date} style={{ width: '96px', height: '50px', backgroundColor: '#eff6ff', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
-                      <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
+                <View className="min-w-max">
+                  {/* 表头 */}
+                  <View className="flex flex-row">
+                    {scheduleData.dates.map((date, index) => (
+                      <View key={date} className="w-32 bg-blue-50 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
+                        <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index]}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* 表格内容 */}
+                  {scheduleData.departments.map((department) => (
+                    <View key={department} className="flex flex-row">
+                      {scheduleData.dates.map((date) => {
+                        const slots = scheduleData.schedule[date]?.[department] || []
+
+                        // 优化显示：如果上下午是同一个医生，只显示一次名字
+                        let slotText = ''
+                        if (slots.length === 0) {
+                          slotText = '休息'
+                        } else if (slots.length === 1) {
+                          const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
+                          slotText = `${slots[0].doctor}${suffix}`
+                        } else if (slots.length === 2) {
+                          if (slots[0].doctor === slots[1].doctor) {
+                            slotText = slots[0].doctor
+                          } else {
+                            slotText = slots.map(s => {
+                              const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
+                              return `${s.doctor}${suffix}`
+                            }).join('\n')
+                          }
+                        }
+
+                        return (
+                          <View
+                            key={date}
+                            className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center bg-white"
+                          >
+                            <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
+                              {slotText}
+                            </Text>
+                          </View>
+                        )
+                      })}
                     </View>
                   ))}
                 </View>
               </ScrollView>
             </View>
-
-            {/* 表格内容 */}
-            {scheduleData.departments.map((department) => (
-              <View key={department} className="flex flex-row mb-1">
-                {/* 固定列：科室名称 */}
-                <View style={{ width: '96px', flexShrink: 0, height: '50px', backgroundColor: '#f9fafb', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text className="block text-sm font-medium text-center">{department}</Text>
-                </View>
-                {/* 可滚动列：医生列表 */}
-                <ScrollView scrollX className="flex-1">
-                  <View style={{ display: 'flex', flexDirection: 'row' }}>
-                    {scheduleData.dates.map((date) => {
-                      const slots = scheduleData.schedule[date]?.[department] || []
-
-                      // 优化显示：如果上下午是同一个医生，只显示一次名字
-                      let slotText = ''
-                      if (slots.length === 0) {
-                        slotText = '休息'
-                      } else if (slots.length === 1) {
-                        const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
-                        slotText = `${slots[0].doctor}${suffix}`
-                      } else if (slots.length === 2) {
-                        if (slots[0].doctor === slots[1].doctor) {
-                          slotText = slots[0].doctor
-                        } else {
-                          slotText = slots.map(s => {
-                            const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
-                            return `${s.doctor}${suffix}`
-                          }).join('\n')
-                        }
-                      }
-
-                      return (
-                        <View key={date} style={{ width: '96px', height: '50px', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                          <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
-                            {slotText}
-                          </Text>
-                        </View>
-                      )
-                    })}
-                  </View>
-                </ScrollView>
-              </View>
-            ))}
           </View>
 
           {/* 值班表 */}
@@ -796,59 +802,62 @@ const IndexPage = () => {
           {/* 医生排班统计 */}
           <Text className="block text-lg font-bold mb-3">医生排班统计</Text>
           <View className="bg-white rounded-lg p-4 shadow-sm">
-            {/* 表头 */}
-            <View className="flex flex-row mb-1">
-              {/* 固定列：医生 */}
-              <View style={{ width: '96px', flexShrink: 0, height: '40px', backgroundColor: '#f0fdf4', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Text className="block text-sm font-bold text-center">医生</Text>
+            <View className="flex flex-row">
+              {/* 固定列：医生姓名 */}
+              <View className="w-24 flex-shrink-0">
+                {/* 表头 */}
+                <View className="w-24 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                  <Text className="block text-sm font-bold text-center">医生</Text>
+                </View>
+                {/* 表格内容 */}
+                {Object.values(scheduleData.doctorSchedule).map((info) => (
+                  <View key={info.name} className="w-24 bg-gray-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                    <Text className="block text-sm font-medium text-center">{info.name}</Text>
+                  </View>
+                ))}
               </View>
-              {/* 可滚动列：统计项 */}
+
+              {/* 可滚动列：统计数据 */}
               <ScrollView scrollX className="flex-1">
-                <View style={{ display: 'flex', flexDirection: 'row' }}>
-                  <View style={{ width: '80px', height: '40px', backgroundColor: '#f0fdf4', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text className="block text-xs font-bold text-center">夜班</Text>
+                <View className="min-w-max">
+                  {/* 表头 */}
+                  <View className="flex flex-row">
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                      <Text className="block text-xs font-bold text-center">夜班</Text>
+                    </View>
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                      <Text className="block text-xs font-bold text-center">上午班(天)</Text>
+                    </View>
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                      <Text className="block text-xs font-bold text-center">下午班(天)</Text>
+                    </View>
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                      <Text className="block text-xs font-bold text-center">休息天数</Text>
+                    </View>
                   </View>
-                  <View style={{ width: '80px', height: '40px', backgroundColor: '#f0fdf4', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text className="block text-xs font-bold text-center">上午班(天)</Text>
-                  </View>
-                  <View style={{ width: '80px', height: '40px', backgroundColor: '#f0fdf4', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text className="block text-xs font-bold text-center">下午班(天)</Text>
-                  </View>
-                  <View style={{ width: '80px', height: '40px', backgroundColor: '#f0fdf4', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text className="block text-xs font-bold text-center">休息天数</Text>
-                  </View>
+
+                  {/* 表格内容 */}
+                  {Object.values(scheduleData.doctorSchedule).map((info) => (
+                    <View key={info.name} className="flex flex-row">
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                        <Text className="block text-xs">{info.nightShifts}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                        <Text className="block text-xs">{(info as any).morningShiftDays || info.morningShifts.length}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                        <Text className="block text-xs">{(info as any).afternoonShiftDays || info.afternoonShifts.length}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
+                        <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
+                          {info.restDays}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               </ScrollView>
             </View>
-
-            {/* 表格内容 */}
-            {Object.values(scheduleData.doctorSchedule).map((info) => (
-              <View key={info.name} className="flex flex-row mb-1">
-                {/* 固定列：医生姓名 */}
-                <View style={{ width: '96px', flexShrink: 0, height: '40px', backgroundColor: '#f9fafb', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Text className="block text-sm font-medium text-center">{info.name}</Text>
-                </View>
-                {/* 可滚动列：统计数据 */}
-                <ScrollView scrollX className="flex-1">
-                  <View style={{ display: 'flex', flexDirection: 'row' }}>
-                    <View style={{ width: '80px', height: '40px', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                      <Text className="block text-xs">{info.nightShifts}</Text>
-                    </View>
-                    <View style={{ width: '80px', height: '40px', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                      <Text className="block text-xs">{(info as any).morningShiftDays || info.morningShifts.length}</Text>
-                    </View>
-                    <View style={{ width: '80px', height: '40px', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                      <Text className="block text-xs">{(info as any).afternoonShiftDays || info.afternoonShifts.length}</Text>
-                    </View>
-                    <View style={{ width: '80px', height: '40px', padding: '8px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                      <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
-                        {info.restDays}
-                      </Text>
-                    </View>
-                  </View>
-                </ScrollView>
-              </View>
-            ))}
           </View>
 
           {/* 操作按钮 */}

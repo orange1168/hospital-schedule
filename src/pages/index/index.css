@@ -7,3 +7,5 @@ page {
 * {
   box-sizing: border-box;
 }
+
+/* 固定列样式 - 使用内联样式替代 */
