@@ -466,6 +466,14 @@ export class ScheduleService {
     dates.forEach((date, dateIndex) => {
       // 🔴 CRITICAL: 标记当天需要休息的医生
       const todayOff = restDatesMap[date] || new Set()
+
+      // 🔴 CRITICAL: 当天的值班医生从休息名单中移除，因为值班医生需要上白班
+      const todayDutyDoctor = dutySchedule[date]
+      if (todayDutyDoctor && todayOff.has(todayDutyDoctor)) {
+        todayOff.delete(todayDutyDoctor)
+        console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 从休息名单中移除，需要上白班`)
+      }
+
       console.log(`🔴 ${date} 需要休息的医生: ${Array.from(todayOff).join(', ') || '无'}`)
       todayOff.forEach(doctor => {
         doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
