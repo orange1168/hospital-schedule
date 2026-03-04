@@ -750,7 +750,9 @@ const IndexPage = () => {
                         let shiftColor = 'text-gray-400'
 
                         if (hasNightShift) {
-                          shiftText = '值班'
+                          // 获取值班医生当天的科室（值班医生在白天也有排班）
+                          const dutyDepartment = departments.morning || departments.afternoon || ''
+                          shiftText = dutyDepartment ? `${dutyDepartment}（值班）` : '值班'
                           shiftColor = 'text-red-600'
                         } else {
                           // 上下午班次显示
@@ -823,19 +825,38 @@ const IndexPage = () => {
 
                       // 优化显示：如果上下午是同一个医生，只显示一次名字
                       let slotText = ''
+                      let slotColor = 'text-gray-800'
+
+                      // 检查该科室是否有值班医生
+                      const dutyDoctor = scheduleData.dutySchedule[date]
+                      const dutyDoctorInDept = slots.some(slot => slot.doctor === dutyDoctor)
+
                       if (slots.length === 0) {
                         slotText = '休息'
+                        slotColor = 'text-gray-400'
                       } else if (slots.length === 1) {
                         const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
                         slotText = `${slots[0].doctor}${suffix}`
+                        if (dutyDoctorInDept) {
+                          slotText = `${slots[0].doctor}（值班）`
+                          slotColor = 'text-red-600'
+                        }
                       } else if (slots.length === 2) {
                         if (slots[0].doctor === slots[1].doctor) {
                           slotText = slots[0].doctor
+                          if (dutyDoctorInDept) {
+                            slotText = `${slots[0].doctor}（值班）`
+                            slotColor = 'text-red-600'
+                          }
                         } else {
                           slotText = slots.map(s => {
                             const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
-                            return `${s.doctor}${suffix}`
+                            const isDuty = s.doctor === dutyDoctor
+                            return `${s.doctor}${isDuty ? '（值班）' : suffix}`
                           }).join('\n')
+                          if (dutyDoctorInDept) {
+                            slotColor = 'text-red-600'
+                          }
                         }
                       }
 
@@ -844,7 +865,7 @@ const IndexPage = () => {
                           key={date}
                           className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center bg-white"
                         >
-                          <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
+                          <Text className={`text-xs text-center whitespace-pre-line ${slotColor}`}>
                             {slotText}
                           </Text>
                         </View>
