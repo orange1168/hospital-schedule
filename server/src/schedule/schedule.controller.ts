@@ -76,7 +76,7 @@ export class ScheduleController {
     }
 
     try {
-      const buffer = await this.scheduleService.generateWordDoc(scheduleData, startDate)
+      const buffer = await this.scheduleService.generateWordDocument(scheduleData)
       const base64 = buffer.toString('base64')
 
       console.log('文档生成成功，大小:', buffer.length, 'bytes')
