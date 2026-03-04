@@ -671,10 +671,10 @@ const IndexPage = () => {
                           shiftText = '值班'
                           shiftColor = 'text-red-600'
                         } else if (shift === 'morning') {
-                          shiftText = department || '点击设置'
+                          shiftText = department || '休息'
                           shiftColor = 'text-blue-600'
                         } else {
-                          shiftText = '点击设置'
+                          shiftText = '休息'
                           shiftColor = 'text-gray-400'
                         }
 
@@ -727,7 +727,7 @@ const IndexPage = () => {
                       // 优化显示：如果上下午是同一个医生，只显示一次名字
                       let slotText = ''
                       if (slots.length === 0) {
-                        slotText = '未安排'
+                        slotText = '休息'
                       } else if (slots.length === 1) {
                         const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
                         slotText = `${slots[0].doctor}${suffix}`
