@@ -147,56 +147,6 @@ const IndexPage = () => {
     })
   }
 
-  // 处理单元格点击（科室排班表）
-  const handleDepartmentCellClick = (date: string, department: string) => {
-    console.log('==== 科室排班表点击 ====')
-    console.log('date:', date)
-    console.log('department:', department)
-    console.log('FIXED_DOCTORS:', FIXED_DOCTORS)
-    console.log('scheduleData:', scheduleData)
-
-    // 先测试能否显示 toast
-    Taro.showModal({
-      title: '调试信息',
-      content: `点击了科室：${department}，日期：${date}`,
-      showCancel: false,
-      success: () => {
-        console.log('Modal 显示成功')
-      }
-    })
-
-    // 直接显示医生选择列表
-    Taro.showActionSheet({
-      itemList: ['取消设置', ...FIXED_DOCTORS],
-      success: (res) => {
-        console.log('ActionSheet 选择结果:', res)
-        if (res.tapIndex === 0) {
-          // 取消设置，清除该科室的排班
-          if (scheduleData) {
-            const newScheduleData = { ...scheduleData }
-            newScheduleData.schedule[date][department] = []
-            setScheduleData(newScheduleData)
-          }
-        } else {
-          // 选择医生
-          const doctor = FIXED_DOCTORS[res.tapIndex - 1]
-          if (scheduleData) {
-            const newScheduleData = { ...scheduleData }
-            addDepartmentAssignment(newScheduleData, date, department, doctor)
-            setScheduleData(newScheduleData)
-            Taro.showToast({
-              title: `${doctor} 已安排到 ${department}`,
-              icon: 'success'
-            })
-          }
-        }
-      },
-      fail: (err) => {
-        console.error('ActionSheet 失败:', err)
-      }
-    })
-  }
-
   // 处理单元格点击（医生排班表）
   const handleDoctorCellClick = (doctor: string, date: string) => {
     const schedule = scheduleData?.doctorSchedule[doctor]
@@ -301,40 +251,6 @@ const IndexPage = () => {
       title: '修改成功',
       icon: 'success'
     })
-  }
-
-  // 添加科室分配
-  const addDepartmentAssignment = (data: ScheduleData, date: string, dept: string, doctor: string) => {
-    // 清除该医生当天的其他科室排班
-    Object.keys(data.schedule[date]).forEach(d => {
-      data.schedule[date][d] = data.schedule[date][d].filter(slot => slot.doctor !== doctor)
-    })
-
-    // 添加到新科室
-    data.schedule[date][dept].push({
-      doctor,
-      shift: 'morning',
-      department: dept
-    })
-    data.schedule[date][dept].push({
-      doctor,
-      shift: 'afternoon',
-      department: dept
-    })
-
-    // 更新医生排班信息
-    const doctorInfo = data.doctorSchedule[doctor]
-    const oldShift = doctorInfo.shifts[date]
-
-    doctorInfo.shifts[date] = 'morning'
-    ;(doctorInfo as any).departmentsByDate[date] = dept
-
-    // 更新统计数据
-    if (oldShift === 'off' || !oldShift) {
-      ;(doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 1
-      ;(doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 1
-      doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 1)
-    }
   }
 
   // 自动填充排班
@@ -717,78 +633,8 @@ const IndexPage = () => {
 
       {scheduleData && (
         <View className="p-4">
-          {/* 科室排班表 */}
-          <Text className="block text-lg font-bold mb-3">科室排班表</Text>
-          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
-            <Text className="block text-sm text-gray-500 mb-2">点击单元格设置医生</Text>
-            <ScrollView scrollX className="w-full overflow-x-auto">
-              <View className="min-w-max">
-                {/* 表头 */}
-                <View className="flex flex-row">
-                  <View className="w-24 bg-blue-50 p-2 border border-gray-200">
-                    <Text className="block text-sm font-bold text-center">科室</Text>
-                  </View>
-                  {scheduleData.dates.map((date, index) => (
-                    <View key={date} className="w-32 bg-blue-50 p-2 border border-gray-200">
-                      <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index]}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* 表格内容 */}
-                {scheduleData.departments.map((department) => (
-                  <View key={department} className="flex flex-row">
-                    <View className="w-24 bg-gray-50 p-2 border border-gray-200">
-                      <Text className="block text-sm font-medium text-center">{department}</Text>
-                    </View>
-                    {scheduleData.dates.map((date) => {
-                      const slots = scheduleData.schedule[date]?.[department] || []
-
-                      // 优化显示：如果上下午是同一个医生，只显示一次名字
-                      let slotText = ''
-                      if (slots.length === 0) {
-                        slotText = '点击设置'
-                      } else if (slots.length === 1) {
-                        const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
-                        slotText = `${slots[0].doctor}${suffix}`
-                      } else if (slots.length === 2) {
-                        if (slots[0].doctor === slots[1].doctor) {
-                          slotText = slots[0].doctor
-                        } else {
-                          slotText = slots.map(s => {
-                            const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
-                            return `${s.doctor}${suffix}`
-                          }).join('\n')
-                        }
-                      }
-
-                      return (
-                        <View
-                          key={date}
-                          className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center cursor-pointer active:bg-blue-50"
-                          onTap={() => {
-                            console.log('点击事件触发:', date, department)
-                            handleDepartmentCellClick(date, department)
-                          }}
-                          onClick={() => {
-                            console.log('onClick 事件触发:', date, department)
-                            handleDepartmentCellClick(date, department)
-                          }}
-                        >
-                          <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
-                            {slotText}
-                          </Text>
-                        </View>
-                      )
-                    })}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-
-          {/* 医生排班表 */}
-          <Text className="block text-lg font-bold mb-3 mt-6">医生排班表</Text>
+          {/* 医生排班表（可编辑） */}
+          <Text className="block text-lg font-bold mb-3">医生排班表</Text>
           <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
             <Text className="block text-sm text-gray-500 mb-2">点击单元格设置科室或休息</Text>
             <ScrollView scrollX className="w-full overflow-x-auto">
@@ -847,6 +693,68 @@ const IndexPage = () => {
                     </View>
                   )
                 })}
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* 科室排班表（只展示） */}
+          <Text className="block text-lg font-bold mb-3 mt-6">科室排班表</Text>
+          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
+            <Text className="block text-sm text-gray-500 mb-2">根据医生排班自动生成，不可编辑</Text>
+            <ScrollView scrollX className="w-full overflow-x-auto">
+              <View className="min-w-max">
+                {/* 表头 */}
+                <View className="flex flex-row">
+                  <View className="w-24 bg-blue-50 p-2 border border-gray-200">
+                    <Text className="block text-sm font-bold text-center">科室</Text>
+                  </View>
+                  {scheduleData.dates.map((date, index) => (
+                    <View key={date} className="w-32 bg-blue-50 p-2 border border-gray-200">
+                      <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index]}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* 表格内容 */}
+                {scheduleData.departments.map((department) => (
+                  <View key={department} className="flex flex-row">
+                    <View className="w-24 bg-gray-50 p-2 border border-gray-200">
+                      <Text className="block text-sm font-medium text-center">{department}</Text>
+                    </View>
+                    {scheduleData.dates.map((date) => {
+                      const slots = scheduleData.schedule[date]?.[department] || []
+
+                      // 优化显示：如果上下午是同一个医生，只显示一次名字
+                      let slotText = ''
+                      if (slots.length === 0) {
+                        slotText = '未安排'
+                      } else if (slots.length === 1) {
+                        const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
+                        slotText = `${slots[0].doctor}${suffix}`
+                      } else if (slots.length === 2) {
+                        if (slots[0].doctor === slots[1].doctor) {
+                          slotText = slots[0].doctor
+                        } else {
+                          slotText = slots.map(s => {
+                            const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
+                            return `${s.doctor}${suffix}`
+                          }).join('\n')
+                        }
+                      }
+
+                      return (
+                        <View
+                          key={date}
+                          className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center bg-white"
+                        >
+                          <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
+                            {slotText}
+                          </Text>
+                        </View>
+                      )
+                    })}
+                  </View>
+                ))}
               </View>
             </ScrollView>
           </View>
