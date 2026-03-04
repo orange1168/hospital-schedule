@@ -641,12 +641,12 @@ const IndexPage = () => {
               {/* 固定列：医生姓名 */}
               <View className="w-24 flex-shrink-0">
                 {/* 表头 */}
-                <View className="w-24 bg-purple-50 p-2 border border-gray-200">
+                <View className="w-24 bg-purple-50 p-2 border border-gray-200 flex items-center justify-center min-h-[50px]">
                   <Text className="block text-sm font-bold text-center">医生</Text>
                 </View>
                 {/* 表格内容 */}
                 {FIXED_DOCTORS.map((doctor) => (
-                  <View key={doctor} className="w-24 bg-gray-50 p-2 border border-gray-200">
+                  <View key={doctor} className="w-24 bg-gray-50 p-2 border border-gray-200 flex items-center justify-center min-h-[50px]">
                     <Text className="block text-sm font-medium text-center">{doctor}</Text>
                   </View>
                 ))}
@@ -663,7 +663,7 @@ const IndexPage = () => {
                   {/* 表头 */}
                   <View className="flex flex-row">
                     {scheduleData.dates.map((date, index) => (
-                      <View key={date} className="w-24 bg-purple-50 p-2 border border-gray-200">
+                      <View key={date} className="w-24 bg-purple-50 p-2 border border-gray-200 flex items-center justify-center min-h-[50px]">
                         <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
                         <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
                       </View>
