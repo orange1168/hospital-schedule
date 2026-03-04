@@ -705,7 +705,7 @@ const IndexPage = () => {
               <View className="min-w-max">
                 {/* 表头 */}
                 <View className="flex flex-row">
-                  <View className="w-24 bg-blue-50 p-2 border border-gray-200">
+                  <View className="w-24 bg-blue-50 p-2 border border-gray-200" style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#eff6ff' }}>
                     <Text className="block text-sm font-bold text-center">科室</Text>
                   </View>
                   {scheduleData.dates.map((date, index) => (
@@ -718,7 +718,7 @@ const IndexPage = () => {
                 {/* 表格内容 */}
                 {scheduleData.departments.map((department) => (
                   <View key={department} className="flex flex-row">
-                    <View className="w-24 bg-gray-50 p-2 border border-gray-200">
+                    <View className="w-24 bg-gray-50 p-2 border border-gray-200" style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#f9fafb' }}>
                       <Text className="block text-sm font-medium text-center">{department}</Text>
                     </View>
                     {scheduleData.dates.map((date) => {
