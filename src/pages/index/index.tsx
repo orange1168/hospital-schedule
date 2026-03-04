@@ -155,10 +155,21 @@ const IndexPage = () => {
     console.log('FIXED_DOCTORS:', FIXED_DOCTORS)
     console.log('scheduleData:', scheduleData)
 
+    // 先测试能否显示 toast
+    Taro.showModal({
+      title: '调试信息',
+      content: `点击了科室：${department}，日期：${date}`,
+      showCancel: false,
+      success: () => {
+        console.log('Modal 显示成功')
+      }
+    })
+
     // 直接显示医生选择列表
     Taro.showActionSheet({
       itemList: ['取消设置', ...FIXED_DOCTORS],
       success: (res) => {
+        console.log('ActionSheet 选择结果:', res)
         if (res.tapIndex === 0) {
           // 取消设置，清除该科室的排班
           if (scheduleData) {
@@ -179,6 +190,9 @@ const IndexPage = () => {
             })
           }
         }
+      },
+      fail: (err) => {
+        console.error('ActionSheet 失败:', err)
       }
     })
   }
@@ -752,7 +766,14 @@ const IndexPage = () => {
                         <View
                           key={date}
                           className="w-32 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center cursor-pointer active:bg-blue-50"
-                          onTap={() => handleDepartmentCellClick(date, department)}
+                          onTap={() => {
+                            console.log('点击事件触发:', date, department)
+                            handleDepartmentCellClick(date, department)
+                          }}
+                          onClick={() => {
+                            console.log('onClick 事件触发:', date, department)
+                            handleDepartmentCellClick(date, department)
+                          }}
                         >
                           <Text className={`text-xs text-center whitespace-pre-line ${slots.length > 0 ? 'text-gray-800' : 'text-gray-400'}`}>
                             {slotText}
