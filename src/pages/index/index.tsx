@@ -203,6 +203,14 @@ const IndexPage = () => {
     const oldShifts = doctorInfo.shifts[date]
     const oldDepartments = (doctorInfo as any).departmentsByDate[date]
 
+    // 确保 morningShiftDays 和 afternoonShiftDays 字段存在
+    if (!(doctorInfo as any).morningShiftDays) {
+      (doctorInfo as any).morningShiftDays = 0
+    }
+    if (!(doctorInfo as any).afternoonShiftDays) {
+      (doctorInfo as any).afternoonShiftDays = 0
+    }
+
     // 更新医生的排班信息
     if (department === '休息') {
       // 全天休息
@@ -229,9 +237,11 @@ const IndexPage = () => {
 
       // 更新统计数据
       if (oldShifts?.morning === 'work') {
+        ;(doctorInfo as any).morningShiftDays = Math.max(0, (doctorInfo as any).morningShiftDays - 0.5)
         doctorInfo.restDays = (doctorInfo.restDays || 0) + 0.5
       }
       if (oldShifts?.afternoon === 'work') {
+        ;(doctorInfo as any).afternoonShiftDays = Math.max(0, (doctorInfo as any).afternoonShiftDays - 0.5)
         doctorInfo.restDays = (doctorInfo.restDays || 0) + 0.5
       }
     } else {
@@ -262,6 +272,7 @@ const IndexPage = () => {
 
         // 更新统计数据
         if (oldShifts?.morning !== 'work') {
+          (doctorInfo as any).morningShiftDays = ((doctorInfo as any).morningShiftDays || 0) + 0.5
           doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 0.5)
         }
       }
@@ -289,6 +300,7 @@ const IndexPage = () => {
 
         // 更新统计数据
         if (oldShifts?.afternoon !== 'work') {
+          (doctorInfo as any).afternoonShiftDays = ((doctorInfo as any).afternoonShiftDays || 0) + 0.5
           doctorInfo.restDays = Math.max(0, (doctorInfo.restDays || 0) - 0.5)
         }
       }

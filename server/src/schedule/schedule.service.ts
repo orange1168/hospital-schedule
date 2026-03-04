@@ -27,9 +27,15 @@ export interface ScheduleSlot {
 // 医生排班信息
 export interface DoctorSchedule {
   name: string
-  shifts: Record<string, ShiftType> // key: date, value: shift type
+  shifts: Record<string, {
+    morning: 'work' | 'off' | 'night'
+    afternoon: 'work' | 'off' | 'night'
+  }> // key: date, value: { morning, afternoon }
   nightShiftsByDate: Record<string, boolean> // key: date, value: 是否有夜班
-  departmentsByDate: Record<string, string> // key: date, value: department name
+  departmentsByDate: Record<string, {
+    morning: string
+    afternoon: string
+  }> // key: date, value: { morning, afternoon }科室名称
   morningShifts: string[] // 上午班次的科室列表
   afternoonShifts: string[] // 下午班次的科室列表
   morningShiftDays: number // 上午班天数
@@ -234,7 +240,7 @@ export class ScheduleService {
       schedule,
       dutySchedule,
       doctorSchedule,
-      useHalfDay: false // 暂时没有实现半天排班
+      useHalfDay: true // 支持半天排班
     }
   }
 
@@ -360,9 +366,9 @@ export class ScheduleService {
 
       dutySchedule[date] = selectedDoctor
       doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true // 标记有夜班
-      // 🔴 CRITICAL: 不设置 shifts[date]，让白班分配时设置为 'morning'
-      // doctorSchedule[selectedDoctor].shifts[date] = 'night' // 移除这行
-      doctorSchedule[selectedDoctor].departmentsByDate[date] = '值班' // 记录为值班
+      // 🔴 CRITICAL: 设置为全天值班，但 shifts[date] 对象中标记为 off（让白班分配时跳过）
+      doctorSchedule[selectedDoctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+      doctorSchedule[selectedDoctor].departmentsByDate[date] = { morning: '值班', afternoon: '值班' } // 记录为值班
       doctorSchedule[selectedDoctor].nightShifts++
 
       // 🔴 CRITICAL: 标记该医生不能在接下来2天内值班（至少休息2天）
@@ -454,7 +460,7 @@ export class ScheduleService {
       const todayOff = restDatesMap[date] || new Set()
       console.log(`🔴 ${date} 需要休息的医生: ${Array.from(todayOff).join(', ') || '无'}`)
       todayOff.forEach(doctor => {
-        doctorSchedule[doctor].shifts[date] = 'off'
+        doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
         console.log(`  ${date} ${doctor} 设置为休息`)
       })
 
@@ -465,10 +471,10 @@ export class ScheduleService {
         if (fixedDept) {
           if (fixedDept === '休息') {
             // 固定为休息
-            doctorSchedule[doctor].shifts[date] = 'off'
+            doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
             console.log(`  ${date} ${doctor} 固定排班设置为休息`)
           } else {
-            // 固定到指定科室
+            // 固定到指定科室（全天）
             schedule[date][fixedDept].push({
               doctor: doctor,
               shift: 'morning',
@@ -481,8 +487,8 @@ export class ScheduleService {
               department: fixedDept
             })
 
-            doctorSchedule[doctor].shifts[date] = 'morning'
-            doctorSchedule[doctor].departmentsByDate[date] = fixedDept
+            doctorSchedule[doctor].shifts[date] = { morning: 'work', afternoon: 'work' }
+            doctorSchedule[doctor].departmentsByDate[date] = { morning: fixedDept, afternoon: fixedDept }
             doctorSchedule[doctor].morningShifts.push(fixedDept)
             doctorSchedule[doctor].afternoonShifts.push(fixedDept)
             console.log(`  ${date} ${doctor} 固定排班设置为 ${fixedDept}`)
@@ -495,7 +501,8 @@ export class ScheduleService {
         !todayOff.has(d) &&
         !isDoctorOnLeave(d, date) &&
         !fixedAssignedDoctors.has(d) && // 🔴 排除已固定排班的医生
-        doctorSchedule[d].shifts[date] !== 'off' // 🔴 排除已标记为休息的医生
+        doctorSchedule[d].shifts[date]?.morning !== 'off' && // 🔴 排除已标记为休息的医生
+        doctorSchedule[d].shifts[date]?.afternoon !== 'off'
       )
 
       // 🔴 CRITICAL: 检查是否有值班医生在休息日被错误包含在工作列表中
@@ -556,17 +563,21 @@ export class ScheduleService {
           else {
             let minWorkDays = Infinity
             const candidates: string[] = []
-            for (const doctor of doctorsWorking) {
-              // 检查这个医生今天是否已经排过白班（不包括夜班）
-              const alreadyHasDayShift = doctorSchedule[doctor].shifts[date] &&
-                                           doctorSchedule[doctor].shifts[date] !== 'off'
 
-              if (!alreadyHasDayShift) {
-                if (doctorWorkDays[doctor] < minWorkDays) {
-                  minWorkDays = doctorWorkDays[doctor]
+            for (const doctor of doctorsWorking) {
+              // 🔴 CRITICAL: 每个医生一天最多工作一个科室
+              const alreadyAssignedToday = doctorSchedule[doctor].shifts[date] &&
+                                           (doctorSchedule[doctor].shifts[date].morning === 'work' ||
+                                            doctorSchedule[doctor].shifts[date].afternoon === 'work')
+
+              if (!alreadyAssignedToday) {
+                const workDays = doctorWorkDays[doctor]
+
+                if (workDays < minWorkDays) {
+                  minWorkDays = workDays
                   candidates.length = 0 // 清空候选列表
                 }
-                if (doctorWorkDays[doctor] === minWorkDays) {
+                if (workDays === minWorkDays) {
                   candidates.push(doctor)
                 }
               }
@@ -592,12 +603,12 @@ export class ScheduleService {
               department: dept
             })
 
-            // 🔴 CRITICAL: 设置白班状态
-            doctorSchedule[bestDoctor].shifts[date] = 'morning'
-            doctorSchedule[bestDoctor].departmentsByDate[date] = dept // 记录科室
+            // 🔴 CRITICAL: 设置白班状态（全天）
+            doctorSchedule[bestDoctor].shifts[date] = { morning: 'work', afternoon: 'work' }
+            doctorSchedule[bestDoctor].departmentsByDate[date] = { morning: dept, afternoon: dept } // 记录科室
             doctorSchedule[bestDoctor].morningShifts.push(dept)
             doctorSchedule[bestDoctor].afternoonShifts.push(dept)
-            
+
             // 统计天数：如果这个医生今天还没排过班，则天数+1
             if (!doctorDailyWork[bestDoctor].has(date)) {
               doctorDailyWork[bestDoctor].add(date)
@@ -628,7 +639,7 @@ export class ScheduleService {
       const morningDays = new Set<string>()
       dates.forEach(date => {
         // 🔴 CRITICAL: 值班当天不计入上午班天数
-        if (info.shifts[date] === 'morning' && !info.nightShiftsByDate[date]) {
+        if (info.shifts[date]?.morning === 'work' && !info.nightShiftsByDate[date]) {
           morningDays.add(date)
         }
       })
@@ -638,7 +649,7 @@ export class ScheduleService {
       const afternoonDays = new Set<string>()
       dates.forEach(date => {
         // 🔴 CRITICAL: 值班当天不计入下午班天数
-        if (info.shifts[date] === 'morning' && !info.nightShiftsByDate[date]) {
+        if (info.shifts[date]?.afternoon === 'work' && !info.nightShiftsByDate[date]) {
           afternoonDays.add(date)
         }
       })
@@ -674,7 +685,8 @@ export class ScheduleService {
 
       // 计算工作天数（包括白班和夜班）
       const workDays = dates.filter(date =>
-        info.shifts[date] && info.shifts[date] !== 'off'
+        info.shifts[date] &&
+        (info.shifts[date].morning === 'work' || info.shifts[date].afternoon === 'work')
       ).length
 
       // 休息天数 = 总天数 - 工作天数
@@ -700,13 +712,20 @@ export class ScheduleService {
     dates: string[]
   ): void {
     Object.values(doctorSchedule).forEach(info => {
-      // 🔴 CRITICAL: 统计所有休息日的天数（shifts[date] === 'off' 或者 shifts[date] 不存在）
+      // 🔴 CRITICAL: 统计所有休息日的天数（上午和下午都休息才算1天，半天休息算0.5天）
       let restDays = 0
 
       dates.forEach(date => {
-        // 如果 shifts[date] 不存在或者为 'off'，都算作休息
-        if (!info.shifts[date] || info.shifts[date] === 'off') {
-          restDays++
+        const shift = info.shifts[date]
+        if (shift) {
+          // 如果全天休息，加1天
+          if (shift.morning === 'off' && shift.afternoon === 'off') {
+            restDays += 1
+          }
+          // 如果半天休息，加0.5天
+          else if (shift.morning === 'off' || shift.afternoon === 'off') {
+            restDays += 0.5
+          }
         }
       })
 
