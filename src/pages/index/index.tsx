@@ -662,7 +662,7 @@ const IndexPage = () => {
                   {/* 表头 */}
                   <View className="flex flex-row">
                     {scheduleData.dates.map((date, index) => (
-                      <View key={date} className="w-24 bg-purple-50 p-2 border border-gray-200">
+                      <View key={date} className="w-24 bg-purple-50 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
                         <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index].split(' ')[0]}</Text>
                         <Text className="block text-xs text-center text-gray-500">{scheduleData.datesWithWeek[index].split(' ')[1]}</Text>
                       </View>
@@ -741,7 +741,7 @@ const IndexPage = () => {
                   {/* 表头 */}
                   <View className="flex flex-row">
                     {scheduleData.dates.map((date, index) => (
-                      <View key={date} className="w-32 bg-blue-50 p-2 border border-gray-200">
+                      <View key={date} className="w-32 bg-blue-50 p-2 border border-gray-200 min-h-[60px] flex items-center justify-center">
                         <Text className="block text-xs font-bold text-center">{scheduleData.datesWithWeek[index]}</Text>
                       </View>
                     ))}
@@ -834,16 +834,16 @@ const IndexPage = () => {
                 <View className="min-w-max">
                   {/* 表头 */}
                   <View className="flex flex-row">
-                    <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                       <Text className="block text-xs font-bold text-center">夜班</Text>
                     </View>
-                    <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                       <Text className="block text-xs font-bold text-center">上午班(天)</Text>
                     </View>
-                    <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                       <Text className="block text-xs font-bold text-center">下午班(天)</Text>
                     </View>
-                    <View className="w-20 bg-green-50 p-2 border border-gray-200">
+                    <View className="w-20 bg-green-50 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                       <Text className="block text-xs font-bold text-center">休息天数</Text>
                     </View>
                   </View>
@@ -851,16 +851,16 @@ const IndexPage = () => {
                   {/* 表格内容 */}
                   {Object.values(scheduleData.doctorSchedule).map((info) => (
                     <View key={info.name} className="flex flex-row">
-                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                         <Text className="block text-xs">{info.nightShifts}</Text>
                       </View>
-                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                         <Text className="block text-xs">{(info as any).morningShiftDays || info.morningShifts.length}</Text>
                       </View>
-                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                         <Text className="block text-xs">{(info as any).afternoonShiftDays || info.afternoonShifts.length}</Text>
                       </View>
-                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                      <View className="w-20 p-2 border border-gray-200 min-h-[40px] flex items-center justify-center">
                         <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
                           {info.restDays}
                         </Text>
