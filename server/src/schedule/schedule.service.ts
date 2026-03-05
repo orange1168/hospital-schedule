@@ -213,6 +213,7 @@ export class ScheduleService {
       dates,
       dayNames,
       departmentPools,
+      departmentUsage,
       dutySchedule
     )
 
@@ -241,8 +242,8 @@ export class ScheduleService {
     // 检查每天至少选择4个科室
     const days: (keyof SelectedDepartments)[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     days.forEach(day => {
-      if (selectedDepartments[day].length < 4) {
-        throw new BadRequestException(`${day}至少需要选择4个科室，当前选择了${selectedDepartments[day].length}个`)
+      if (!selectedDepartments[day] || selectedDepartments[day].length < 4) {
+        throw new BadRequestException(`${day}至少需要选择4个科室，当前选择了${selectedDepartments[day]?.length || 0}个`)
       }
     })
 
@@ -512,6 +513,7 @@ export class ScheduleService {
     dates: string[],
     dayNames: string[],
     departmentPools: Record<string, string[]>,
+    departmentUsage: DepartmentUsage,
     dutySchedule: Record<string, string>
   ): void {
     // 为值班医生优先分配科室
@@ -520,6 +522,7 @@ export class ScheduleService {
       dates,
       dayNames,
       departmentPools,
+      departmentUsage,
       dutySchedule
     )
 
@@ -528,8 +531,27 @@ export class ScheduleService {
       doctors,
       dates,
       dayNames,
-      departmentPools
+      departmentPools,
+      departmentUsage
     )
+
+    // 为所有空位的医生设置"休息"
+    doctors.forEach(doctor => {
+      dates.forEach((date, index) => {
+        const dayName = dayNames[index]
+
+        // 跳过强制休息日（已经设置了）
+        if (date === doctor.requiredRestDate) {
+          return
+        }
+
+        // 检查是否有空位
+        if (doctor.schedule[dayName].morning === '' || doctor.schedule[dayName].afternoon === '') {
+          doctor.schedule[dayName] = { morning: '休息', afternoon: '休息' }
+          console.log(`🔴 ${doctor.name} ${dayName} 无排班，设置为休息`)
+        }
+      })
+    })
 
     console.log('🔴 自动填充完成')
   }
@@ -542,6 +564,7 @@ export class ScheduleService {
     dates: string[],
     dayNames: string[],
     departmentPools: Record<string, string[]>,
+    departmentUsage: DepartmentUsage,
     dutySchedule: Record<string, string>
   ): void {
     const dutyDoctors = doctors.filter(d => d.isDutyDoctor)
@@ -562,13 +585,34 @@ export class ScheduleService {
         }
 
         // 为值班医生分配科室（全天）
+        let assignedDept = ''
         if (departmentPools[dayName].length > 0) {
-          const dept = departmentPools[dayName][0]
-          doctor.schedule[dayName] = { morning: dept, afternoon: dept }
+          // 优先从科室池中分配科室
+          assignedDept = departmentPools[dayName][0]
           departmentPools[dayName].shift()
-          doctor.workDays++
-          console.log(`🔴 值班医生 ${doctor.name} ${dayName} 分配到 ${dept}`)
+        } else {
+          // 科室池为空，查找第一个还没有被占用2次的科室
+          const allDepts = Object.keys(departmentUsage[dayName])
+          assignedDept = allDepts.find(dept => {
+            const usage = departmentUsage[dayName][dept]
+            // 检查是否已经被占用2次（上午和下午都有人）
+            return usage.morning === '' && usage.afternoon === ''
+          })
+          
+          // 如果所有科室都被占用了，不分配科室（保持空位）
+          if (!assignedDept) {
+            console.log(`🔴 ${dayName} 所有科室都已被占用，值班医生 ${doctor.name} 不分配科室`)
+            return
+          }
         }
+
+        // 更新科室占用记录
+        departmentUsage[dayName][assignedDept].morning = doctor.name
+        departmentUsage[dayName][assignedDept].afternoon = doctor.name
+
+        doctor.schedule[dayName] = { morning: assignedDept, afternoon: assignedDept }
+        doctor.workDays++
+        console.log(`🔴 值班医生 ${doctor.name} ${dayName} 分配到 ${assignedDept}`)
       })
     })
   }
@@ -580,7 +624,8 @@ export class ScheduleService {
     doctors: Doctor[],
     dates: string[],
     dayNames: string[],
-    departmentPools: Record<string, string[]>
+    departmentPools: Record<string, string[]>,
+    departmentUsage: DepartmentUsage
   ): void {
     const otherDoctors = doctors.filter(d => !d.isDutyDoctor)
 
@@ -608,6 +653,19 @@ export class ScheduleService {
         // 选择工作天数最少的医生
         const selectedDoctor = availableDoctors[0]
         const dept = departmentPools[dayName][0]
+
+        // 检查科室是否已经被占用
+        const usage = departmentUsage[dayName][dept]
+        if (usage.morning !== '' || usage.afternoon !== '') {
+          // 科室已经被占用，跳过
+          console.log(`🔴 ${dayName} ${dept} 已被占用，跳过`)
+          departmentPools[dayName].shift()
+          continue
+        }
+
+        // 更新科室占用记录
+        departmentUsage[dayName][dept].morning = selectedDoctor.name
+        departmentUsage[dayName][dept].afternoon = selectedDoctor.name
 
         // 分配科室（全天）
         selectedDoctor.schedule[dayName] = { morning: dept, afternoon: dept }
