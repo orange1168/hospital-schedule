@@ -2,6 +2,7 @@ import { View, Text, Button, ScrollView, Picker } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
+import DepartmentSelector from '@/components/DepartmentSelector'
 import './index.css'
 
 interface ScheduleData {
@@ -48,6 +49,26 @@ const IndexPage = () => {
   const [dutyStartDoctor, setDutyStartDoctor] = useState<string>('')
   const [showDutyStartPicker, setShowDutyStartPicker] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // 科室选择相关状态
+  const [showDepartmentSelector, setShowDepartmentSelector] = useState(false)
+  const [selectedDepartments, setSelectedDepartments] = useState<{
+    Monday: string[]
+    Tuesday: string[]
+    Wednesday: string[]
+    Thursday: string[]
+    Friday: string[]
+    Saturday: string[]
+    Sunday: string[]
+  }>({
+    Monday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
+    Tuesday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
+    Wednesday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
+    Thursday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
+    Friday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
+    Saturday: ['1诊室', '2诊室', '4诊室', '5诊室'],
+    Sunday: ['1诊室', '2诊室', '4诊室', '5诊室']
+  })
 
   // 获取下周一
   const getNextMonday = (): string => {
@@ -427,7 +448,8 @@ const IndexPage = () => {
         method: 'POST',
         data: {
           startDate,
-          dutyStartDoctor,
+          startDutyDoctor: dutyStartDoctor, // 🔴 修改：使用新参数名
+          selectedDepartments, // 🔴 新增：传递科室选择
           fixedSchedule
         }
       })
@@ -855,6 +877,12 @@ const IndexPage = () => {
           {/* 操作按钮 */}
           <View className="flex flex-row gap-2 mt-6 mb-4">
             <Button
+              className="flex-1 bg-purple-500 text-white rounded-lg py-3"
+              onTap={() => setShowDepartmentSelector(true)}
+            >
+              科室设置
+            </Button>
+            <Button
               className="flex-1 bg-blue-500 text-white rounded-lg py-3"
               onClick={handleAutoFillSchedule}
               disabled={loading}
@@ -980,6 +1008,14 @@ const IndexPage = () => {
           </View>
         </View>
       )}
+
+      {/* 科室选择弹窗 */}
+      <DepartmentSelector
+        visible={showDepartmentSelector}
+        onClose={() => setShowDepartmentSelector(false)}
+        selectedDepartments={selectedDepartments}
+        onDepartmentsChange={setSelectedDepartments}
+      />
     </ScrollView>
   )
 }

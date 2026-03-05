@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
-import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun } from 'docx'
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun, HeadingLevel, AlignmentType } from 'docx'
 
 // 固定的医生列表（14人）
 const FIXED_DOCTORS = [
@@ -550,9 +550,6 @@ export class ScheduleService {
       dates.forEach((date, index) => {
         const dayName = dayNames[index]
 
-        // 跳过值班当天（已经在值班医生分配时处理了）
-        if (date === doctor.dutyDate) return
-
         // 跳过强制休息日
         if (date === doctor.requiredRestDate) {
           doctor.schedule[dayName] = { morning: '休息', afternoon: '休息' }
@@ -784,11 +781,186 @@ export class ScheduleService {
   }
 
   /**
-   * 导出排班表为Word文档（保持原有逻辑）
+   * 导出排班表为Word文档
    */
   async exportSchedule(scheduleData: ScheduleData): Promise<Buffer> {
-    // 保持原有的导出逻辑
-    // TODO: 实现
-    throw new BadRequestException('导出功能待实现')
+    const { dates, datesWithWeek, departments, schedule, dutySchedule, doctorSchedule } = scheduleData
+
+    const children: (Paragraph | Table)[] = []
+
+    // 标题
+    children.push(
+      new Paragraph({
+        text: '医院排班表',
+        heading: HeadingLevel.HEADING_1,
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 400 }
+      })
+    )
+
+    // 科室排班表
+    children.push(
+      new Paragraph({
+        text: '一、科室排班表',
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 400, after: 200 }
+      })
+    )
+
+    const departmentTableRows: TableRow[] = []
+    // 表头
+    const departmentHeaderRow = new TableRow({
+      children: [
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] })] }),
+        ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] }))
+      ]
+    })
+    departmentTableRows.push(departmentHeaderRow)
+
+    // 每个科室一行
+    departments.forEach(dept => {
+      const rowCells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: dept, bold: true })] })] })]
+
+      dates.forEach(date => {
+        const assignments = schedule[date]?.[dept] || []
+        const doctorNames = assignments.map(a => a.doctor).join('、')
+        rowCells.push(new TableCell({ children: [new Paragraph({ text: doctorNames || '-' })] }))
+      })
+
+      departmentTableRows.push(new TableRow({ children: rowCells }))
+    })
+
+    children.push(new Table({
+      rows: departmentTableRows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1 },
+        bottom: { style: BorderStyle.SINGLE, size: 1 },
+        left: { style: BorderStyle.SINGLE, size: 1 },
+        right: { style: BorderStyle.SINGLE, size: 1 },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1 }
+      }
+    }))
+
+    // 医生排班表
+    children.push(
+      new Paragraph({
+        text: '二、医生排班表',
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 600, after: 200 }
+      })
+    )
+
+    const doctorTableRows: TableRow[] = []
+    // 表头
+    const doctorHeaderRow = new TableRow({
+      children: [
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '医生', bold: true })] })] }),
+        ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] })),
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '值班次数', bold: true })] })] })
+      ]
+    })
+    doctorTableRows.push(doctorHeaderRow)
+
+    // 每个医生一行
+    Object.values(doctorSchedule).forEach((doctor: any) => {
+      const rowCells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: doctor.name, bold: true })] })] })]
+
+      dates.forEach(date => {
+        const shifts = doctor.shifts?.[date]
+        let shiftText = ''
+        if (!shifts) {
+          shiftText = '-'
+        } else if (shifts.morning === 'work' && shifts.afternoon === 'work') {
+          const dept = doctor.departmentsByDate?.[date]?.morning || '未知'
+          shiftText = dept
+        } else if (shifts.morning === 'work') {
+          const dept = doctor.departmentsByDate?.[date]?.morning || '未知'
+          shiftText = `上午:${dept}`
+        } else if (shifts.afternoon === 'work') {
+          const dept = doctor.departmentsByDate?.[date]?.afternoon || '未知'
+          shiftText = `下午:${dept}`
+        } else {
+          shiftText = '休息'
+        }
+
+        // 检查是否是值班
+        const isDuty = doctor.nightShiftsByDate?.[date]
+        if (isDuty && shiftText !== '休息') {
+          shiftText = `${shiftText}（值班）`
+        }
+
+        rowCells.push(new TableCell({ children: [new Paragraph({ text: shiftText })] }))
+      })
+
+      rowCells.push(new TableCell({ children: [new Paragraph({ text: String(doctor.nightShifts || 0) })] }))
+      doctorTableRows.push(new TableRow({ children: rowCells }))
+    })
+
+    children.push(new Table({
+      rows: doctorTableRows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1 },
+        bottom: { style: BorderStyle.SINGLE, size: 1 },
+        left: { style: BorderStyle.SINGLE, size: 1 },
+        right: { style: BorderStyle.SINGLE, size: 1 },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1 }
+      }
+    }))
+
+    // 值班表
+    children.push(
+      new Paragraph({
+        text: '三、值班表',
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 600, after: 200 }
+      })
+    )
+
+    const dutyTableRows: TableRow[] = []
+    // 表头
+    const dutyHeaderRow = new TableRow({
+      children: [
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] })] }),
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '值班医生', bold: true })] })] })
+      ]
+    })
+    dutyTableRows.push(dutyHeaderRow)
+
+    // 每天一行
+    dates.forEach((date, index) => {
+      const dutyDoctor = dutySchedule[date] || '-'
+      dutyTableRows.push(new TableRow({
+        children: [
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: datesWithWeek[index] })] })] }),
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: dutyDoctor, bold: true })] })] })
+        ]
+      }))
+    })
+
+    children.push(new Table({
+      rows: dutyTableRows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1 },
+        bottom: { style: BorderStyle.SINGLE, size: 1 },
+        left: { style: BorderStyle.SINGLE, size: 1 },
+        right: { style: BorderStyle.SINGLE, size: 1 },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1 }
+      }
+    }))
+
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children
+      }]
+    })
+
+    return Packer.toBuffer(doc)
   }
 }

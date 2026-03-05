@@ -1,5 +1,5 @@
-import { View, Text, Checkbox, ScrollView } from '@tarojs/components'
-import { useState } from 'react'
+import { View, Text, Checkbox, ScrollView, Button } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import './DepartmentSelector.css'
 
 // 科室列表
@@ -16,6 +16,8 @@ const DEFAULT_DEPARTMENTS = [
 const DEFAULT_WEEKEND_DEPARTMENTS = ['1诊室', '2诊室', '4诊室', '5诊室']
 
 interface DepartmentSelectorProps {
+  visible: boolean
+  onClose: () => void
   selectedDepartments: {
     Monday: string[]
     Tuesday: string[]
@@ -25,10 +27,10 @@ interface DepartmentSelectorProps {
     Saturday: string[]
     Sunday: string[]
   }
-  onChange: (selectedDepartments: DepartmentSelectorProps['selectedDepartments']) => void
+  onDepartmentsChange: (selectedDepartments: DepartmentSelectorProps['selectedDepartments']) => void
 }
 
-const DepartmentSelector = ({ selectedDepartments, onChange }: DepartmentSelectorProps) => {
+const DepartmentSelector = ({ visible, onClose, selectedDepartments, onDepartmentsChange }: DepartmentSelectorProps) => {
   const days = [
     { key: 'Monday', label: '周一' },
     { key: 'Tuesday', label: '周二' },
@@ -61,7 +63,7 @@ const DepartmentSelector = ({ selectedDepartments, onChange }: DepartmentSelecto
       newSelected[day as keyof typeof selectedDepartments] = [...dayDepartments, dept]
     }
 
-    onChange(newSelected)
+    onDepartmentsChange(newSelected)
   }
 
   const resetToDefault = () => {
@@ -79,7 +81,7 @@ const DepartmentSelector = ({ selectedDepartments, onChange }: DepartmentSelecto
             Saturday: [...DEFAULT_WEEKEND_DEPARTMENTS],
             Sunday: [...DEFAULT_WEEKEND_DEPARTMENTS]
           }
-          onChange(defaultSelected)
+          onDepartmentsChange(defaultSelected)
           Taro.showToast({
             title: '已重置',
             icon: 'success'
@@ -87,6 +89,10 @@ const DepartmentSelector = ({ selectedDepartments, onChange }: DepartmentSelecto
         }
       }
     })
+  }
+
+  if (!visible) {
+    return null
   }
 
   return (
@@ -100,6 +106,13 @@ const DepartmentSelector = ({ selectedDepartments, onChange }: DepartmentSelecto
             onClick={resetToDefault}
           >
             重置
+          </Button>
+          <Button
+            className="department-selector-close-btn"
+            size="mini"
+            onClick={onClose}
+          >
+            关闭
           </Button>
         </View>
       </View>
@@ -121,6 +134,7 @@ const DepartmentSelector = ({ selectedDepartments, onChange }: DepartmentSelecto
                   onClick={() => handleToggleDepartment(day.key, dept)}
                 >
                   <Checkbox
+                    value={dept}
                     checked={selectedDepartments[day.key as keyof typeof selectedDepartments].includes(dept)}
                     color="#1890ff"
                   />
