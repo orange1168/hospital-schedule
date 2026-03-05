@@ -198,7 +198,12 @@ export class ScheduleService {
 
     // 初始化医生排班记录
     const doctorSchedule: Record<string, DoctorSchedule> = {}
-    doctorList.forEach(doctor => {
+
+    // 🔴 CRITICAL: 只选择必要的医生数量参与排班
+    const selectedDoctors = doctorList.slice(0, Math.min(minDoctorsNeeded, doctorList.length))
+    console.log('🔴🔴🔴 参与排班的医生:', selectedDoctors)
+
+    selectedDoctors.forEach(doctor => {
       doctorSchedule[doctor] = {
         name: doctor,
         shifts: {},
@@ -219,6 +224,21 @@ export class ScheduleService {
       console.log(`🔴检查 ${doctor} 在 ${date} 是否请假: ${isLeave}, leaveMap[${doctor}] = ${leaveMap[doctor]}`)
       return isLeave
     }
+
+    // 🔴 CRITICAL: 更新 availableDoctors 为实际参与排班的医生
+    const effectiveAvailableDoctors = selectedDoctors.filter(d => {
+      // 如果医生在 leaveMap 中，检查是否有可用的日期
+      if (leaveMap[d]) {
+        // 如果 dates 数组为空，表示该医生一周都请假
+        if (leaveMap[d].length === 0) {
+          return false
+        }
+        // 如果有指定日期，检查是否所有日期都在请假列表中
+        const allDatesLeave = dates.every(date => leaveMap[d].includes(date))
+        return !allDatesLeave
+      }
+      return true
+    })
 
     // 检查医生在固定排班中是否已分配（支持半天班次）
     const getFixedAssignment = (doctor: string, date: string): {
@@ -244,7 +264,7 @@ export class ScheduleService {
     this.assignNightShifts(
       dates,
       dutySchedule,
-      availableDoctors,
+      effectiveAvailableDoctors,
       dutyStartDoctor,
       doctorSchedule,
       isDoctorOnLeave,
@@ -260,7 +280,7 @@ export class ScheduleService {
       dates,
       schedule,
       dutySchedule,
-      availableDoctors,
+      effectiveAvailableDoctors,
       doctorSchedule,
       isDoctorOnLeave,
       getFixedAssignment,
@@ -268,7 +288,7 @@ export class ScheduleService {
     )
 
     // 步骤3：检查每个医生的休息天数
-    const failedDoctors = this.validateRestDays(doctorSchedule, dates, availableDoctors)
+    const failedDoctors = this.validateRestDays(doctorSchedule, dates, effectiveAvailableDoctors)
     if (failedDoctors.length > 0) {
       throw new BadRequestException(
         `人数不足，以下医生无法获得至少一天的休息：${failedDoctors.join('、')}`
@@ -1090,6 +1110,18 @@ export class ScheduleService {
     availableDoctors.forEach(doctorName => {
       const info = doctorSchedule[doctorName]
       if (!info) return
+
+      // 🔴 CRITICAL: 只验证实际有工作的医生（至少有1个班次的医生）
+      const hasWork = dates.some(date =>
+        info.shifts[date] &&
+        (info.shifts[date].morning === 'work' || info.shifts[date].afternoon === 'work')
+      )
+
+      // 如果医生没有工作，跳过验证
+      if (!hasWork) {
+        console.log(`${info.name}: 未分配任何工作，跳过休息天数验证`)
+        return
+      }
 
       // 🔴 CRITICAL: 计算半天休息天数（上午或下午有一个是 'off' 就算半天休息）
       const halfRestDays = dates.filter(date =>
