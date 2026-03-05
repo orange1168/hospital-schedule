@@ -199,11 +199,11 @@ export class ScheduleService {
     // 初始化医生排班记录
     const doctorSchedule: Record<string, DoctorSchedule> = {}
 
-    // 🔴 CRITICAL: 只选择必要的医生数量参与排班
-    const selectedDoctors = doctorList.slice(0, Math.min(minDoctorsNeeded, doctorList.length))
-    console.log('🔴🔴🔴 参与排班的医生:', selectedDoctors)
+    // 🔴 CRITICAL: 使用所有传入的医生，而不是只选择必要的医生
+    // 这样可以确保用户手动设置排班状态后，系统能继续使用这些医生
+    console.log('🔴🔴🔴 参与排班的医生:', doctorList)
 
-    selectedDoctors.forEach(doctor => {
+    doctorList.forEach(doctor => {
       doctorSchedule[doctor] = {
         name: doctor,
         shifts: {},
@@ -226,7 +226,7 @@ export class ScheduleService {
     }
 
     // 🔴 CRITICAL: 更新 availableDoctors 为实际参与排班的医生
-    const effectiveAvailableDoctors = selectedDoctors.filter(d => {
+    const effectiveAvailableDoctors = doctorList.filter(d => {
       // 如果医生在 leaveMap 中，检查是否有可用的日期
       if (leaveMap[d]) {
         // 如果 dates 数组为空，表示该医生一周都请假

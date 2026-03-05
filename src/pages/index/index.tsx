@@ -422,11 +422,30 @@ const IndexPage = () => {
 
       console.log('固定排班数据:', fixedSchedule)
 
-      // 🔴 CRITICAL: 从 scheduleData 中提取医生列表和科室列表
-      const doctorNames = Object.keys(scheduleData.doctorSchedule)
-      const departmentNames = scheduleData.departments || []
+      // 🔴 CRITICAL: 根据科室数量动态计算需要多少医生
+      // 逻辑：4个科室 + 1个值班 = 每天需要5个医生
+      // 7天排班，每个医生需要值班1次，值班后休息0.5天，还需要工作4.5天
+      // 每个医生最多能承担 (7 - 0.5) = 6.5天的工作量
+      // 所以最少需要的医生数量 = ceil(5 * 7 / 6.5) ≈ 6个医生
+      const totalShiftsNeeded = (scheduleData.departments.length + 1) * scheduleData.dates.length
+      const doctorWorkCapacity = 6.5 // 每个医生最多能承担6.5天的工作量（值班后休息0.5天）
+      const minDoctorsNeeded = Math.ceil(totalShiftsNeeded / doctorWorkCapacity)
+      const maxDoctorsNeeded = FIXED_DOCTORS.length
 
-      console.log('传递给后端的医生列表:', doctorNames)
+      console.log('总班次需求:', totalShiftsNeeded, '(科室:', scheduleData.departments.length, '+ 值班1) * 天数:', scheduleData.dates.length)
+      console.log('最少需要医生:', minDoctorsNeeded, '最多可用医生:', maxDoctorsNeeded)
+
+      // 🔴 CRITICAL: 只选择必要的医生数量参与排班，避免医生闲置
+      // 从值班起始医生开始，选择 minDoctorsNeeded 个医生
+      const startIndex = FIXED_DOCTORS.indexOf(dutyStartDoctor)
+      const selectedDoctors: string[] = []
+      for (let i = 0; i < minDoctorsNeeded; i++) {
+        selectedDoctors.push(FIXED_DOCTORS[(startIndex + i) % FIXED_DOCTORS.length])
+      }
+
+      console.log('选择的医生列表:', selectedDoctors)
+
+      const departmentNames = scheduleData.departments || []
       console.log('传递给后端的科室列表:', departmentNames)
 
       const res = await Network.request({
@@ -436,7 +455,7 @@ const IndexPage = () => {
           startDate,
           dutyStartDoctor,
           fixedSchedule,
-          doctors: doctorNames,
+          doctors: selectedDoctors,
           departmentNames: departmentNames
         }
       })

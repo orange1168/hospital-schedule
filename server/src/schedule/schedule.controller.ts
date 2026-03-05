@@ -27,6 +27,13 @@ export class ScheduleController {
     console.log('收到排班生成请求:', body)
     const { startDate, departmentNames, doctors, dutyStartDoctor, leaveRequests, fixedSchedule } = body
 
+    console.log('🔴🔴🔴 Controller 收到参数:')
+    console.log('  startDate:', startDate)
+    console.log('  departmentNames:', departmentNames)
+    console.log('  doctors:', doctors)
+    console.log('  dutyStartDoctor:', dutyStartDoctor)
+    console.log('  fixedSchedule:', fixedSchedule)
+
     if (!startDate) {
       return {
         code: 400,
