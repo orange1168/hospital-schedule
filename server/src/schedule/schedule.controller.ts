@@ -1,12 +1,12 @@
 import { Controller, Post, Body } from '@nestjs/common'
-import { ScheduleService, FixedSchedule } from './schedule.service'
+import { ScheduleService, FixedSchedule, SelectedDepartments } from './schedule.service'
 
 interface GenerateScheduleDto {
   startDate: string
-  doctors?: string[]
-  dutyStartDoctor?: string
-  leaveRequests?: any[] // ✅ 修改：使用 leaveRequests 匹配前端
+  startDutyDoctor: string // 起始值班医生
+  selectedDepartments: SelectedDepartments // 每天选择的科室
   fixedSchedule?: FixedSchedule // 固定排班数据
+  leaveDoctors?: string[] | { doctor: string; dates: string[] }[] // 请假医生
 }
 
 interface DownloadDocDto {
@@ -19,12 +19,12 @@ export class ScheduleController {
   constructor(private readonly scheduleService: ScheduleService) {}
 
   /**
-   * 生成排班表
+   * 生成排班表（新版本）
    */
   @Post('generate')
   async generateSchedule(@Body() body: GenerateScheduleDto) {
-    console.log('收到排班生成请求:', body)
-    const { startDate, doctors, dutyStartDoctor, leaveRequests, fixedSchedule } = body
+    console.log('收到排班生成请求（新版本）:', body)
+    const { startDate, startDutyDoctor, selectedDepartments, fixedSchedule, leaveDoctors } = body
 
     if (!startDate) {
       return {
@@ -34,13 +34,29 @@ export class ScheduleController {
       }
     }
 
+    if (!startDutyDoctor) {
+      return {
+        code: 400,
+        msg: '请提供起始值班医生',
+        data: null
+      }
+    }
+
+    if (!selectedDepartments) {
+      return {
+        code: 400,
+        msg: '请提供科室选择',
+        data: null
+      }
+    }
+
     try {
       const scheduleData = await this.scheduleService.generateSchedule(
         startDate,
-        doctors,
-        dutyStartDoctor,
-        leaveRequests, // ✅ 修改：使用 leaveRequests
-        fixedSchedule // 固定排班数据
+        startDutyDoctor,
+        selectedDepartments,
+        fixedSchedule,
+        leaveDoctors
       )
       console.log('排班生成成功:', scheduleData)
 
@@ -76,7 +92,7 @@ export class ScheduleController {
     }
 
     try {
-      const buffer = await this.scheduleService.generateWordDoc(scheduleData, startDate)
+      const buffer = await this.scheduleService.exportSchedule(scheduleData)
       const base64 = buffer.toString('base64')
 
       console.log('文档生成成功，大小:', buffer.length, 'bytes')
