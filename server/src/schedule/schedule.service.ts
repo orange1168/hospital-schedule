@@ -11,8 +11,8 @@ const FIXED_DOCTORS = [
 export interface FixedSchedule {
   [date: string]: {
     [doctor: string]: {
-      morning: string | '休息' | '请假'
-      afternoon: string | '休息' | '请假'
+      morning: string | '请输入' | '休息' | '请假'
+      afternoon: string | '请输入' | '休息' | '请假'
     }
   }
 }
@@ -84,18 +84,16 @@ export class ScheduleService {
     doctors?: string[] | { name: string; isMainDuty?: boolean }[],
     dutyStartDoctor?: string,
     leaveDoctors?: string[] | LeaveInfo[],
-    fixedSchedule?: FixedSchedule,
-    departmentNames?: string[] // 科室列表
+    fixedSchedule?: FixedSchedule
   ): Promise<ScheduleData> {
     console.log('🔥 generateSchedule 被调用，startDate:', startDate)
-    console.log('🔥 科室列表:', departmentNames)
     console.log('🔥 固定排班数据:', fixedSchedule)
 
     // 将医生列表转换为字符串数组
     const doctorList = doctors && doctors.length > 0
       ? doctors.map(d => typeof d === 'string' ? d : d.name)
       : FIXED_DOCTORS
-
+    
     // 将请假信息转换为统一格式：Record<doctorName, date[]>
     const leaveMap: Record<string, string[]> = {}
     if (leaveDoctors && leaveDoctors.length > 0) {
@@ -135,74 +133,26 @@ export class ScheduleService {
       }
       return true
     })
-
-    console.log('🔴🔴🔴 availableDoctors:', availableDoctors)
-    console.log('🔴🔴🔴 availableDoctors.length:', availableDoctors.length)
-    console.log('🔴🔴🔴 doctorList:', doctorList)
-
+    
     if (availableDoctors.length === 0) {
       throw new BadRequestException('没有可用的医生进行排班')
     }
 
-    // 🔴 CRITICAL: 使用用户传入的科室列表，如果没有则使用默认科室
-    const departments = departmentNames && departmentNames.length > 0
-      ? departmentNames
-      : this.departments
-
-    console.log('🔴🔴🔴 使用的科室列表:', departments)
-    console.log('🔴🔴🔴 可用医生列表:', availableDoctors)
-    console.log('🔴🔴🔴 可用医生数量:', availableDoctors.length)
-    console.log('🔴🔴🔴 总医生数量:', doctorList.length)
-    console.log('🔴🔴🔴 排班日期数量:', dates.length)
-
-    // 🔴 CRITICAL: 验证医生数量是否足够
-    // 每天需要 departments.length × 2 个班次（上午和下午）
-    // 值班医生第二天休息，值班周期 2 天
-    // 在 2 天的值班周期中：
-    //   - 第一天：值班医生工作 2 个班次，其他医生也工作
-    //   - 第二天：值班医生休息，其他医生工作
-    // 平均每天需要的医生数量 = ceil(2 × departments.length / 3)
-    // 解释：
-    //   - 每天需要 2 × departments.length 个班次
-    //   - 值班周期 2 天中，值班医生只工作第一天（2 个班次），平均每天贡献 1 个班次
-    //   - 所以 N 个医生在 2 天周期中可提供 2N - 1 个班次
-    //   - 需要 2N - 1 >= 4 × departments.length
-    //   - 即 N >= ceil(2 × departments.length / 3)
-    // 最少医生数量 = ceil(2 × departments.length / 3) + 1（+1 是值班医生）
-    const avgDoctorsNeeded = Math.ceil(2 * departments.length / 3)
-    const minDoctorsNeeded = avgDoctorsNeeded + 1
-
-    console.log('🔴🔴🔴 平均每天需要的医生数量:', avgDoctorsNeeded)
-    console.log('🔴🔴🔴 最少需要的医生数量:', minDoctorsNeeded)
-
-    if (availableDoctors.length < minDoctorsNeeded) {
-      throw new BadRequestException(
-        `医生数量不足！${departments.length}个科室每天需要${departments.length * 2}个班次，` +
-        `值班医生第二天休息，至少需要${minDoctorsNeeded}个医生（平均每天${avgDoctorsNeeded}个），` +
-        `当前只有${availableDoctors.length}个可用医生。`
-      )
-    }
-
     const datesWithWeek = dates.map(date => this.getDateWithWeek(date))
-
+    
     // 初始化排班表结构
     const schedule: Record<string, Record<string, ScheduleSlot[]>> = {}
     dates.forEach(date => {
       schedule[date] = {}
-      departments.forEach(dept => {
+      this.departments.forEach(dept => {
         schedule[date][dept] = []
       })
     })
 
     const dutySchedule: Record<string, string> = {}
-
+    
     // 初始化医生排班记录
     const doctorSchedule: Record<string, DoctorSchedule> = {}
-
-    // 🔴 CRITICAL: 使用所有传入的医生，而不是只选择必要的医生
-    // 这样可以确保用户手动设置排班状态后，系统能继续使用这些医生
-    console.log('🔴🔴🔴 参与排班的医生:', doctorList)
-
     doctorList.forEach(doctor => {
       doctorSchedule[doctor] = {
         name: doctor,
@@ -225,25 +175,10 @@ export class ScheduleService {
       return isLeave
     }
 
-    // 🔴 CRITICAL: 更新 availableDoctors 为实际参与排班的医生
-    const effectiveAvailableDoctors = doctorList.filter(d => {
-      // 如果医生在 leaveMap 中，检查是否有可用的日期
-      if (leaveMap[d]) {
-        // 如果 dates 数组为空，表示该医生一周都请假
-        if (leaveMap[d].length === 0) {
-          return false
-        }
-        // 如果有指定日期，检查是否所有日期都在请假列表中
-        const allDatesLeave = dates.every(date => leaveMap[d].includes(date))
-        return !allDatesLeave
-      }
-      return true
-    })
-
     // 检查医生在固定排班中是否已分配（支持半天班次）
     const getFixedAssignment = (doctor: string, date: string): {
-      morning: string | '休息' | '请假'
-      afternoon: string | '休息' | '请假'
+      morning: string | '请输入' | '休息' | '请假'
+      afternoon: string | '请输入' | '休息' | '请假'
     } | null => {
       if (!fixedSchedule || !fixedSchedule[date] || !fixedSchedule[date][doctor]) {
         return null
@@ -259,36 +194,43 @@ export class ScheduleService {
       return dayNames[dayOfWeek]
     }
 
-    // 步骤1：分配夜班
+    // 🔴 CRITICAL: 先定义 restDatesMap，让 assignNightShifts 直接更新它
+    // key: date, value: Set<doctor>
+    const restDatesMap: Record<string, Set<string>> = {}
+
+    // 步骤1：分配夜班（同时更新 restDatesMap）
     console.log('开始分配夜班...')
     this.assignNightShifts(
       dates,
       dutySchedule,
-      effectiveAvailableDoctors,
+      availableDoctors,
       dutyStartDoctor,
+      doctorSchedule,
+      isDoctorOnLeave,
+      getFixedAssignment, // 🔴 添加 getFixedAssignment 参数
+      restDatesMap // 🔴 传递 restDatesMap 参数
+    )
+
+    console.log('🔴 restDatesMap 内容:')
+    Object.entries(restDatesMap).forEach(([date, doctors]) => {
+      console.log(`${date}: ${Array.from(doctors).join(', ')}`)
+    })
+
+    // 步骤2：分配上午和下午班次
+    console.log('开始分配白班...')
+    this.assignDayShifts(
+      dates,
+      schedule,
+      dutySchedule, // ✅ 添加 dutySchedule 参数
+      restDatesMap,
+      availableDoctors,
       doctorSchedule,
       isDoctorOnLeave,
       getFixedAssignment
     )
 
-    // 🔴 CRITICAL: 检查值班医生是否在固定排班中被设置为休息，如果是则重新选择
-    this.validateAndAdjustDutyDoctors(dates, dutySchedule, fixedSchedule, doctorSchedule)
-
-    // 步骤2：分配白班（逐日处理）
-    console.log('开始分配白班...')
-    this.assignDayShifts(
-      dates,
-      schedule,
-      dutySchedule,
-      effectiveAvailableDoctors,
-      doctorSchedule,
-      isDoctorOnLeave,
-      getFixedAssignment,
-      departments // 🔴 CRITICAL: 传递科室列表
-    )
-
     // 步骤3：检查每个医生的休息天数
-    const failedDoctors = this.validateRestDays(doctorSchedule, dates, effectiveAvailableDoctors)
+    const failedDoctors = this.validateRestDays(doctorSchedule, dates, availableDoctors)
     if (failedDoctors.length > 0) {
       throw new BadRequestException(
         `人数不足，以下医生无法获得至少一天的休息：${failedDoctors.join('、')}`
@@ -301,118 +243,12 @@ export class ScheduleService {
     return {
       dates,
       datesWithWeek,
-      departments, // 🔴 CRITICAL: 使用实际的科室列表
+      departments: this.departments,
       schedule,
       dutySchedule,
       doctorSchedule,
       useHalfDay: true // 支持半天排班
     }
-  }
-
-  /**
-   * 状态判断函数：判断医生在指定日期是否已分配
-   */
-  private isAssigned(doctor: string, date: string, doctorSchedule: Record<string, DoctorSchedule>): boolean {
-    return doctorSchedule[doctor]?.shifts[date] !== undefined
-  }
-
-  /**
-   * 状态判断函数：判断医生在指定日期是否工作（上午或下午）
-   */
-  private isWorking(doctor: string, date: string, doctorSchedule: Record<string, DoctorSchedule>): boolean {
-    const shift = doctorSchedule[doctor]?.shifts[date]
-    return shift?.morning === 'work' || shift?.afternoon === 'work'
-  }
-
-  /**
-   * 状态判断函数：判断医生在指定日期是否休息（上午或下午）
-   */
-  private isResting(doctor: string, date: string, doctorSchedule: Record<string, DoctorSchedule>): boolean {
-    const shift = doctorSchedule[doctor]?.shifts[date]
-    return shift?.morning === 'off' || shift?.afternoon === 'off'
-  }
-
-  /**
-   * 状态判断函数：判断医生在指定日期是否全天休息
-   */
-  private isFullDayRest(doctor: string, date: string, doctorSchedule: Record<string, DoctorSchedule>): boolean {
-    const shift = doctorSchedule[doctor]?.shifts[date]
-    return shift?.morning === 'off' && shift?.afternoon === 'off'
-  }
-
-  /**
-   * 状态判断函数：判断医生前一天是否值班
-   */
-  private isDutyYesterday(
-    doctor: string,
-    date: string,
-    dutySchedule: Record<string, string>,
-    dates: string[],
-    dateIndex: number
-  ): boolean {
-    if (dateIndex === 0) return false
-    const yesterday = dates[dateIndex - 1]
-    return dutySchedule[yesterday] === doctor
-  }
-
-  /**
-   * 状态设置函数：设置医生休息
-   */
-  private setRest(
-    doctor: string,
-    date: string,
-    doctorSchedule: Record<string, DoctorSchedule>
-  ): void {
-    doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-    doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
-  }
-
-  /**
-   * 状态设置函数：设置医生工作（指定科室）
-   */
-  private setWork(
-    doctor: string,
-    date: string,
-    department: string,
-    shift: 'morning' | 'afternoon',
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>
-  ): void {
-    schedule[date][department].push({
-      doctor: doctor,
-      shift: shift,
-      department: department
-    })
-
-    if (!doctorSchedule[doctor].shifts[date]) {
-      doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-    }
-    doctorSchedule[doctor].shifts[date][shift] = 'work'
-
-    if (!doctorSchedule[doctor].departmentsByDate[date]) {
-      doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
-    }
-    doctorSchedule[doctor].departmentsByDate[date][shift] = department
-
-    if (shift === 'morning') {
-      doctorSchedule[doctor].morningShifts.push(department)
-    } else {
-      doctorSchedule[doctor].afternoonShifts.push(department)
-    }
-  }
-
-  /**
-   * 状态设置函数：设置医生全天工作（同一科室）
-   */
-  private setFullDayWork(
-    doctor: string,
-    date: string,
-    department: string,
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>
-  ): void {
-    this.setWork(doctor, date, department, 'morning', schedule, doctorSchedule)
-    this.setWork(doctor, date, department, 'afternoon', schedule, doctorSchedule)
   }
 
   /**
@@ -426,11 +262,19 @@ export class ScheduleService {
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
     getFixedAssignment: (doctor: string, date: string) => {
-      morning: string | '休息' | '请假'
-      afternoon: string | '休息' | '请假'
-    } | null
+      morning: string | '请输入' | '休息' | '请假'
+      afternoon: string | '请输入' | '休息' | '请假'
+    } | null,
+    restDatesMap: Record<string, Set<string>> // 🔴 添加 restDatesMap 参数
   ): void {
-    // 找到值班起始医生在 availableDoctors 中的索引
+    // 找到值班起始医生在 FIXED_DOCTORS 中的索引
+    let startIndex = 0
+    if (dutyStartDoctor && FIXED_DOCTORS.includes(dutyStartDoctor)) {
+      startIndex = FIXED_DOCTORS.indexOf(dutyStartDoctor)
+    }
+
+    // 🔴 CRITICAL: 基于可用医生列表进行轮换，而不是 FIXED_DOCTORS
+    // 避免因医生数量不一致导致的索引错误
     let doctorIndex = 0
     if (dutyStartDoctor && availableDoctors.includes(dutyStartDoctor)) {
       doctorIndex = availableDoctors.indexOf(dutyStartDoctor)
@@ -468,11 +312,12 @@ export class ScheduleService {
           doctorPriority[doctor] = -1
           console.log(`🔴 ${date} 医生 ${doctor}: 请假=${isOnLeave}, 不能值班=${blockDays}天, 固定休息=${isFixedRest}, 固定请假=${isFixedLeave}, 优先级=-1`)
         } else {
-          // 🔴 CRITICAL: 统计累计休息天数（从 shifts 中统计）
+          // 🔴 CRITICAL: 从 restDatesMap 中统计累计休息天数（更准确）
           let totalRestDays = 0
           for (let i = 0; i < index; i++) {
             const checkDate = dates[i]
-            const isRest = this.isFullDayRest(doctor, checkDate, doctorSchedule)
+            // 检查这天该医生是否在休息列表中
+            const isRest = restDatesMap[checkDate]?.has(doctor) || false
             const isDutyDate = dutySchedule[checkDate] === doctor
 
             // 如果这天是休息，且不是值班当天，则计入累计休息
@@ -490,6 +335,9 @@ export class ScheduleService {
           }
 
           // 🔴 CRITICAL: 综合优先级 = (值班次数 * 1000) + (累计休息天数 * 10)
+          // 这样可以确保：
+          // - 值班次数少的医生优先级更高（确保公平轮流值班）
+          // - 值班次数相同时，累计休息天数多的医生优先级更高
           const priority = dutyCount * 1000 + totalRestDays * 10
           doctorPriority[doctor] = priority
 
@@ -508,6 +356,7 @@ export class ScheduleService {
       }
 
       // 🔴 CRITICAL: 选择优先级最低的医生（值班次数最少）
+      // 如果优先级相同，按照值班起始医生的顺序选择
       selectedDoctor = availableForDuty.reduce((best, current) => {
         const bestPriority = doctorPriority[best]
         const currentPriority = doctorPriority[current]
@@ -533,100 +382,71 @@ export class ScheduleService {
 
       dutySchedule[date] = selectedDoctor
       doctorSchedule[selectedDoctor].nightShiftsByDate[date] = true // 标记有夜班
+      // 🔴 CRITICAL: 不设置 shifts[date] 和 departmentsByDate[date]，让白班分配时自动填充
+      // 白班分配时，值班医生会被优先分配到第一个科室
       doctorSchedule[selectedDoctor].nightShifts++
+
+      // 🔴 CRITICAL: 标记该医生在第二天休息（值班后休息1天）
+      // 🔴 CRITICAL: 值班医生第二天休息不计入每周一天的休息要求中
+      if (index + 1 < dates.length) {
+        const nextDate = dates[index + 1]
+        // 🔴 CRITICAL: 不将值班医生加入到 restDatesMap 中，因为值班后第二天休息不计入每周一天的休息要求
+        // 但需要标记该医生在第二天不能工作（因为要休息）
+        // 我们通过 doctorDutyBlockDays 来控制，而不是 restDatesMap
+        console.log(`${date} 夜班医生 ${selectedDoctor}，${nextDate} 强制休息（不计入每周一天的休息要求中）`)
+      }
 
       // 🔴 CRITICAL: 设置该医生不能值班的剩余天数为1
       doctorDutyBlockDays[selectedDoctor] = 1
       console.log(`${date} 夜班医生 ${selectedDoctor}，接下来1天不能值班`)
+
+      doctorIndex++
     })
 
-    console.log('🔴 值班分配完成')
-  }
+    console.log('🔴 restDatesMap 内容:')
+    Object.entries(restDatesMap).forEach(([date, doctors]) => {
+      console.log(`  ${date}: ${Array.from(doctors).join(', ')}`)
+    })
 
-  /**
-   * 验证并调整值班医生：检查值班医生是否在固定排班中被设置为休息，如果是则重新选择
-   */
-  private validateAndAdjustDutyDoctors(
-    dates: string[],
-    dutySchedule: Record<string, string>,
-    fixedSchedule: FixedSchedule | undefined,
-    doctorSchedule: Record<string, DoctorSchedule>
-  ): void {
-    let hasAdjustment = false
-
-    for (let i = 0; i < dates.length; i++) {
-      const date = dates[i]
+    // 🔴 CRITICAL: 验证值班医生的休息日设置
+    dates.forEach((date, index) => {
       const dutyDoctor = dutySchedule[date]
-
-      if (!dutyDoctor) continue
-
-      // 检查值班医生在固定排班中是否被设置为休息或请假
-      const fixed = fixedSchedule?.[date]?.[dutyDoctor]
-      if (fixed) {
-        const isRest = fixed.morning === '休息' || fixed.afternoon === '休息'
-        const isLeave = fixed.morning === '请假' || fixed.afternoon === '请假'
-
-        if (isRest || isLeave) {
-          console.log(`⚠️ ${date} 值班医生 ${dutyDoctor} 在固定排班中被设置为${isRest ? '休息' : '请假'}，需要重新选择`)
-
-          // 移除原来的夜班标记
-          delete doctorSchedule[dutyDoctor].nightShiftsByDate[date]
-          doctorSchedule[dutyDoctor].nightShifts--
-
-          // 重新选择值班医生（排除已休息或请假的医生）
-          const availableDoctors = Object.keys(doctorSchedule).filter(doctor => {
-            // 排除原来的值班医生
-            if (doctor === dutyDoctor) return false
-
-            // 排除固定排班中休息或请假的医生
-            const fixed = fixedSchedule?.[date]?.[doctor]
-            if (fixed && (fixed.morning === '休息' || fixed.afternoon === '休息' || fixed.morning === '请假' || fixed.afternoon === '请假')) {
-              return false
-            }
-
-            // 排除当天已经有夜班的医生
-            return !doctorSchedule[doctor].nightShiftsByDate[date]
-          })
-
-          if (availableDoctors.length === 0) {
-            throw new BadRequestException(`${date} 没有可用的值班医生（所有可用医生都请假或处于值班休息期）`)
-          }
-
-          // 选择优先级最低的医生（选择轮到的人）
-          const newDutyDoctor = availableDoctors[0]
-          console.log(`✅ ${date} 重新选择值班医生: ${newDutyDoctor}`)
-
-          // 更新值班医生
-          dutySchedule[date] = newDutyDoctor
-          doctorSchedule[newDutyDoctor].nightShiftsByDate[date] = true
-          doctorSchedule[newDutyDoctor].nightShifts++
-
-          hasAdjustment = true
-        }
+      if (dutyDoctor && index + 1 < dates.length) {
+        const nextDate = dates[index + 1]
+        console.log(`🔴 ${date} 值班医生 ${dutyDoctor}，应该休息的日期: ${nextDate}`)
+        console.log(`  ${nextDate} restDatesMap: ${Array.from(restDatesMap[nextDate] || [])}`)
       }
-    }
-
-    if (hasAdjustment) {
-      console.log('✅ 值班医生调整完成')
-    }
+    })
   }
 
   /**
-   * 分配白班（逐日处理，阶段化）
+   * 分配上午和下午班次
    */
   private assignDayShifts(
     dates: string[],
     schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    dutySchedule: Record<string, string>,
+    dutySchedule: Record<string, string>, // ✅ 添加 dutySchedule 参数
+    restDatesMap: Record<string, Set<string>>,
     availableDoctors: string[],
     doctorSchedule: Record<string, DoctorSchedule>,
     isDoctorOnLeave: (doctor: string, date: string) => boolean,
     getFixedAssignment: (doctor: string, date: string) => {
-      morning: string | '休息' | '请假'
-      afternoon: string | '休息' | '请假'
-    } | null,
-    departments: string[] // 🔴 CRITICAL: 添加科室列表参数
+      morning: string | '休息'
+      afternoon: string | '休息'
+    } | null
   ): void {
+    // 🔴 CRITICAL: 不预先分配休息日，让值班医生的选择更灵活
+    // 值班医生选择时优先选择休息时间最长的医生，自然确保公平
+    const restAssigned: Set<string> = new Set() // 已分配休息的医生
+    const nightDoctors: Set<string> = new Set() // 夜班医生集合
+    
+    // 收集所有夜班医生
+    Object.values(doctorSchedule).forEach(info => {
+      if (info.nightShifts > 0) {
+        nightDoctors.add(info.name)
+      }
+    })
+
     // 记录每个医生的工作天数
     const doctorWorkDays: Record<string, number> = {}
     availableDoctors.forEach(doctor => {
@@ -639,446 +459,412 @@ export class ScheduleService {
       doctorDailyWork[doctor] = new Set()
     })
 
-    // 🔴 CRITICAL: 逐日处理
     dates.forEach((date, dateIndex) => {
-      console.log(`\n🔴🔴🔴 处理日期: ${date}`)
+      // 🔴 CRITICAL: 标记当天需要休息的医生（来自 restDatesMap，包括固定排班的休息）
+      const todayOff = restDatesMap[date] || new Set()
 
-      // 判断是否是周末
+      // 🔴 CRITICAL: 处理值班医生第二天休息（不计入每周一天的休息要求中）
+      if (dateIndex > 0) {
+        const prevDate = dates[dateIndex - 1]
+        const prevDutyDoctor = dutySchedule[prevDate]
+        if (prevDutyDoctor && !todayOff.has(prevDutyDoctor)) {
+          // 将前一天值班的医生加入到休息名单中
+          todayOff.add(prevDutyDoctor)
+          console.log(`🔴 ${date} 前一天值班医生 ${prevDutyDoctor} 强制休息（不计入每周一天的休息要求中）`)
+        }
+      }
+
+      // 🔴 CRITICAL: 当天的值班医生从休息名单中移除，因为值班医生需要上白班
+      const todayDutyDoctor = dutySchedule[date]
+      if (todayDutyDoctor && todayOff.has(todayDutyDoctor)) {
+        todayOff.delete(todayDutyDoctor)
+        console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 从休息名单中移除，需要上白班`)
+      }
+
+      console.log(`🔴 ${date} 需要休息的医生: ${Array.from(todayOff).join(', ') || '无'}`)
+      todayOff.forEach(doctor => {
+        doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+        console.log(`  ${date} ${doctor} 设置为休息`)
+      })
+
+      // 🔴 CRITICAL: 判断是否是周末（周六或周日）
       const dateObj = new Date(date)
       const dayOfWeek = dateObj.getDay()
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 // 0是周日，6是周六
 
-      // 周末只排前4个科室，工作日排所有科室
-      const departmentsForDay = isWeekend ? departments.slice(0, 4) : departments
+      // 🔴 CRITICAL: 周末只排前4个科室
+      const weekendDepartments = this.departments.slice(0, 4)
 
-      console.log(`🔴 ${date} 是否是周末: ${isWeekend}, 科室数量: ${departmentsForDay.length}`)
+      // 🔴 CRITICAL: 先应用固定排班（支持半天班次）
+      const fixedAssignedDoctors = new Set<string>()
+      for (const doctor of availableDoctors) {
+        const fixedAssignment = getFixedAssignment(doctor, date)
+        if (fixedAssignment) {
+          const { morning, afternoon } = fixedAssignment
 
-      // 🔴 CRITICAL: 优先处理值班医生
+          // 🔴 CRITICAL: 如果固定排班是"请输入"（空值），跳过处理，交给后续流程
+          if (morning === '请输入' && afternoon === '请输入') {
+            console.log(`  ${date} ${doctor} 固定排班为请输入，跳过处理`)
+            continue
+          }
+
+          // 🔴 CRITICAL: 如果固定排班包含"请假"（额外休息，不算在每周一天的休息要求中）
+          if (morning === '请假' || afternoon === '请假') {
+            // 检查医生当天是否是值班医生
+            if (doctor === todayDutyDoctor) {
+              console.log(`  🔴 ${date} ${doctor} 是值班医生，跳过固定排班的请假设置`)
+              fixedAssignedDoctors.add(doctor)
+              continue
+            }
+
+            // 设置请假日（额外休息，不算在每周一天的休息要求中）
+            if (!doctorSchedule[doctor].shifts[date]) {
+              doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+            }
+            if (morning === '请假') {
+              doctorSchedule[doctor].shifts[date].morning = 'off'
+            }
+            if (afternoon === '请假') {
+              doctorSchedule[doctor].shifts[date].afternoon = 'off'
+            }
+            console.log(`  ${date} ${doctor} 固定排班设置为请假（额外休息）`)
+            fixedAssignedDoctors.add(doctor)
+            continue
+          }
+
+          // 🔴 CRITICAL: 如果固定排班包含"休息"（算在每周一天的休息要求中）
+          if (morning === '休息' || afternoon === '休息') {
+            // 如果上下午都是休息，标记为全天休息
+            if (morning === '休息' && afternoon === '休息') {
+              // 🔴 CRITICAL: 如果医生当天是值班医生，不能设置为休息
+              if (doctor === todayDutyDoctor) {
+                console.log(`  🔴 ${date} ${doctor} 是值班医生，固定排班为休息，但值班医生必须上班`)
+                // 不设置休息，让值班医生后续分配到科室
+                // 但是要记录值班医生已被固定排班处理过
+                ;(doctorSchedule[doctor] as any).fixedAssignment = '休息'
+              } else {
+                doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+                // 🔴 CRITICAL: 将休息医生加入到 restDatesMap 中，这样会算在每周一天的休息要求中
+                if (!restDatesMap[date]) {
+                  restDatesMap[date] = new Set()
+                }
+                restDatesMap[date].add(doctor)
+                console.log(`  ${date} ${doctor} 固定排班设置为休息（算在每周一天的休息要求中）`)
+                fixedAssignedDoctors.add(doctor)
+              }
+            }
+            // 半天休息
+            else {
+              // 如果半天是休息，设置休息状态
+              if (morning === '休息') {
+                if (!doctorSchedule[doctor].shifts[date]) {
+                  doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+                }
+                doctorSchedule[doctor].shifts[date].morning = 'off'
+                // 🔴 CRITICAL: 将休息医生加入到 restDatesMap 中
+                if (!restDatesMap[date]) {
+                  restDatesMap[date] = new Set()
+                }
+                restDatesMap[date].add(doctor)
+                console.log(`  ${date} ${doctor} 固定排班设置为上午休息`)
+              }
+              if (afternoon === '休息') {
+                if (!doctorSchedule[doctor].shifts[date]) {
+                  doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+                }
+                doctorSchedule[doctor].shifts[date].afternoon = 'off'
+                // 🔴 CRITICAL: 将休息医生加入到 restDatesMap 中
+                if (!restDatesMap[date]) {
+                  restDatesMap[date] = new Set()
+                }
+                restDatesMap[date].add(doctor)
+                console.log(`  ${date} ${doctor} 固定排班设置为下午休息`)
+              }
+              fixedAssignedDoctors.add(doctor)
+            }
+            continue
+          }
+
+          // 🔴 CRITICAL: 周末检查：如果是周末，只允许在前4个科室设置固定排班
+          // 🔴 CRITICAL: 如果是值班医生，且固定排班不在前4个科室，记录为需要调整，但不跳过整个固定排班
+          if (isWeekend) {
+            const morningInvalid = morning !== '请输入' && !weekendDepartments.includes(morning)
+            const afternoonInvalid = afternoon !== '请输入' && !weekendDepartments.includes(afternoon)
+
+            // 如果是值班医生，且固定排班不在前4个科室，记录为需要调整
+            if (doctor === todayDutyDoctor && (morningInvalid || afternoonInvalid)) {
+              console.log(`🔴 ${date} 值班医生 ${doctor} 固定排班不在周末前4个科室内，将在值班医生分配阶段重新分配`)
+              ;(doctorSchedule[doctor] as any).needsWeekendAdjustment = true
+              // 不跳过，继续处理其他部分
+            }
+            // 如果不是值班医生，且两个科室都不在前4个，跳过处理
+            else if (morningInvalid && afternoonInvalid) {
+              console.log(`  ⚠️ ${date} ${doctor} 固定排班不在周末前4个科室内，跳过`)
+              continue
+            }
+            // 如果只有半天不在前4个，只跳过那半天
+            else if (morningInvalid || afternoonInvalid) {
+              console.log(`  ⚠️ ${date} ${doctor} 部分固定排班不在周末前4个科室内，将跳过不符合的部分`)
+            }
+          }
+
+          // 如果上下午都是同一个科室，标记为全天工作
+          if (morning !== '请输入' && afternoon !== '请输入' && morning === afternoon) {
+            schedule[date][morning].push({
+              doctor: doctor,
+              shift: 'morning',
+              department: morning
+            })
+            schedule[date][afternoon].push({
+              doctor: doctor,
+              shift: 'afternoon',
+              department: afternoon
+            })
+
+            doctorSchedule[doctor].shifts[date] = { morning: 'work', afternoon: 'work' }
+            doctorSchedule[doctor].departmentsByDate[date] = { morning: morning, afternoon: afternoon }
+            doctorSchedule[doctor].morningShifts.push(morning)
+            doctorSchedule[doctor].afternoonShifts.push(afternoon)
+            console.log(`  ${date} ${doctor} 固定排班设置为 ${morning}`)
+          }
+          // 半天班次
+          else {
+            // 处理上午班次
+            if (morning !== '请输入' && (!isWeekend || weekendDepartments.includes(morning))) {
+              schedule[date][morning].push({
+                doctor: doctor,
+                shift: 'morning',
+                department: morning
+              })
+              if (!doctorSchedule[doctor].shifts[date]) {
+                doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+              }
+              doctorSchedule[doctor].shifts[date].morning = 'work'
+              if (!doctorSchedule[doctor].departmentsByDate[date]) {
+                doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
+              }
+              doctorSchedule[doctor].departmentsByDate[date].morning = morning
+              doctorSchedule[doctor].morningShifts.push(morning)
+              console.log(`  ${date} ${doctor} 固定排班设置为上午 ${morning}`)
+            }
+
+            // 处理下午班次
+            if (afternoon !== '请输入' && (!isWeekend || weekendDepartments.includes(afternoon))) {
+              schedule[date][afternoon].push({
+                doctor: doctor,
+                shift: 'afternoon',
+                department: afternoon
+              })
+              if (!doctorSchedule[doctor].shifts[date]) {
+                doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
+              }
+              doctorSchedule[doctor].shifts[date].afternoon = 'work'
+              if (!doctorSchedule[doctor].departmentsByDate[date]) {
+                doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
+              }
+              doctorSchedule[doctor].departmentsByDate[date].afternoon = afternoon
+              doctorSchedule[doctor].afternoonShifts.push(afternoon)
+              console.log(`  ${date} ${doctor} 固定排班设置为下午 ${afternoon}`)
+            }
+          }
+
+          fixedAssignedDoctors.add(doctor)
+        }
+      }
+
+      // 🔴 CRITICAL: 排除有固定排班的医生（全天或半天）
+      const doctorsWorking = availableDoctors.filter(d =>
+        !todayOff.has(d) &&
+        !isDoctorOnLeave(d, date) &&
+        (!fixedAssignedDoctors.has(d) || d === todayDutyDoctor) // 🔴 排除有固定排班的医生，但值班医生除外
+      )
+
+      console.log(`${date} 可用医生: ${doctorsWorking.join(', ') || '无'}`)
+      console.log(`${date} fixedAssignedDoctors: ${Array.from(fixedAssignedDoctors).join(', ') || '无'}`)
+
+      // 🔴 CRITICAL: 检查是否有值班医生在休息日被错误包含在工作列表中
       const dutyDoctor = dutySchedule[date]
-      if (dutyDoctor && !this.isAssigned(dutyDoctor, date, doctorSchedule)) {
-        // 检查值班医生是否前一天值班（应该不会，因为值班医生第二天必须休息）
-        if (this.isDutyYesterday(dutyDoctor, date, dutySchedule, dates, dateIndex)) {
-          this.setRest(dutyDoctor, date, doctorSchedule)
-          console.log(`${date} 值班医生 ${dutyDoctor} 前一天值班，设置休息`)
-        } else {
-          // 检查值班医生是否有固定排班
-          const fixedAssignment = getFixedAssignment(dutyDoctor, date)
-          if (fixedAssignment) {
-            this.applyFixedSchedule(
-              dutyDoctor,
-              date,
-              fixedAssignment,
-              schedule,
-              doctorSchedule,
-              dutyDoctor,
-              isWeekend,
-              departmentsForDay
-            )
-            console.log(`${date} 值班医生 ${dutyDoctor} 应用固定排班`)
-          } else {
-            // 值班医生分配到第一个可用科室（上午和下午）
-            this.assignDutyDoctor(dutyDoctor, date, schedule, doctorSchedule, departmentsForDay)
-            console.log(`${date} 值班医生 ${dutyDoctor} 分配科室`)
+      if (dutyDoctor && dateIndex > 0) {
+        const prevDate = dates[dateIndex - 1]
+        const prevDutyDoctor = dutySchedule[prevDate]
+
+        // 检查前一天值班的医生是否在今天的休息名单中，但却在工作列表中
+        if (prevDutyDoctor && todayOff.has(prevDutyDoctor)) {
+          if (doctorsWorking.includes(prevDutyDoctor)) {
+            console.log(`⚠️ 警告: ${prevDutyDoctor} 在 ${date} 应该休息（前一天值班），但仍在工作列表中！`)
           }
         }
       }
 
-      // 🔴 CRITICAL: 设置前一天值班的医生休息
-      availableDoctors.forEach(doctor => {
-        if (doctor === dutyDoctor) return
+      // 🔴 CRITICAL: 周末只排前4个科室，工作日排所有科室
+      let departmentsForDay = this.departments
+      if (isWeekend) {
+        departmentsForDay = this.departments.slice(0, 4) // 只排前4个科室
+      }
 
-        if (this.isDutyYesterday(doctor, date, dutySchedule, dates, dateIndex)) {
-          // 🔴 CRITICAL: 前一天值班的医生上午休息，下午可以工作
-          if (!doctorSchedule[doctor].shifts[date]) {
-            doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-          }
-          doctorSchedule[doctor].shifts[date].morning = 'off'
-          if (!doctorSchedule[doctor].departmentsByDate[date]) {
-            doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
-          }
-          doctorSchedule[doctor].departmentsByDate[date].morning = ''
-          console.log(`${date} ${doctor} 前一天值班，上午休息`)
-        }
-      })
+      // 🔴 CRITICAL: 固定排班处理完成后，优先为值班医生分配科室
+      // 值班医生的科室分配是最高优先级的
+      if (todayDutyDoctor && !doctorSchedule[todayDutyDoctor].shifts[date]) {
+        // 检查值班医生是否有固定排班（科室、休息、请假）
+        const fixedAssignment = getFixedAssignment(todayDutyDoctor, date)
+        const hasFixedSchedule = fixedAssignment &&
+                                (fixedAssignment.morning !== '请输入' || fixedAssignment.afternoon !== '请输入')
+        const needsWeekendAdjustment = (doctorSchedule[todayDutyDoctor] as any).needsWeekendAdjustment
 
-      // 🔴 CRITICAL: 为其他医生应用固定排班
-      availableDoctors.forEach(doctor => {
-        if (doctor === dutyDoctor) return
-
-        const fixedAssignment = getFixedAssignment(doctor, date)
+        // 检查是否有有效的固定排班（休息、请假、或在周末前4个科室内的科室）
+        let hasValidFixedSchedule = false
         if (fixedAssignment) {
-          this.applyFixedSchedule(
-            doctor,
-            date,
-            fixedAssignment,
-            schedule,
-            doctorSchedule,
-            dutyDoctor,
-            isWeekend,
-            departmentsForDay
-          )
-          console.log(`${date} ${doctor} 应用固定排班`)
+          // 如果是休息或请假，认为是有效固定排班
+          if (fixedAssignment.morning === '休息' || fixedAssignment.morning === '请假' ||
+              fixedAssignment.afternoon === '休息' || fixedAssignment.afternoon === '请假') {
+            hasValidFixedSchedule = true
+          }
+          // 如果是科室，检查是否在前4个（如果是周末）
+          else if (!isWeekend || (weekendDepartments.includes(fixedAssignment.morning) &&
+                                   weekendDepartments.includes(fixedAssignment.afternoon))) {
+            hasValidFixedSchedule = true
+          }
+        }
+
+        // 只有当值班医生没有有效的固定排班时，才为其分配科室
+        if (!hasValidFixedSchedule) {
+          // 🔴 CRITICAL: 找到第一个没有被分配的科室，避免与固定排班冲突
+          let availableDepartment = ''
+          for (const dept of departmentsForDay) {
+            if (schedule[date][dept].length === 0) {
+              availableDepartment = dept
+              break
+            }
+          }
+
+          // 如果所有科室都已经被分配（不太可能），则跳过值班医生分配
+          if (!availableDepartment) {
+            console.log(`🔴 ${date} 所有科室都已被分配，跳过值班医生 ${todayDutyDoctor} 的科室分配`)
+            fixedAssignedDoctors.add(todayDutyDoctor)
+          } else {
+            console.log(`🔴 ${date} 优先为值班医生 ${todayDutyDoctor} 分配到 ${availableDepartment}${needsWeekendAdjustment ? '（周末调整）' : ''}`)
+
+            schedule[date][availableDepartment].push({
+              doctor: todayDutyDoctor,
+              shift: 'morning',
+              department: availableDepartment
+            })
+            schedule[date][availableDepartment].push({
+              doctor: todayDutyDoctor,
+              shift: 'afternoon',
+              department: availableDepartment
+            })
+
+            doctorSchedule[todayDutyDoctor].shifts[date] = { morning: 'work', afternoon: 'work' }
+            doctorSchedule[todayDutyDoctor].departmentsByDate[date] = { morning: availableDepartment, afternoon: availableDepartment }
+            doctorSchedule[todayDutyDoctor].morningShifts.push(availableDepartment)
+            doctorSchedule[todayDutyDoctor].afternoonShifts.push(availableDepartment)
+
+            // 将值班医生加入 fixedAssignedDoctors，避免重复分配
+            fixedAssignedDoctors.add(todayDutyDoctor)
+          }
+        } else {
+          console.log(`🔴 ${date} 值班医生 ${todayDutyDoctor} 已有有效固定排班，跳过科室分配`)
+          // 即使有固定排班，也将值班医生加入 fixedAssignedDoctors，避免重复分配
+          fixedAssignedDoctors.add(todayDutyDoctor)
+        }
+      }
+
+      // 🔴 CRITICAL: 记录已分配的科室（包括固定排班）
+      const assignedDepartments = new Set<string>()
+      for (const dept of departmentsForDay) {
+        if (schedule[date][dept].length > 0) {
+          assignedDepartments.add(dept)
+        }
+      }
+
+      // 🔴 CRITICAL: 为每个科室分配医生（全天）
+      departmentsForDay.forEach((dept, deptIndex) => {
+        // 🔴 跳过已经分配的科室（包括固定排班）
+        if (assignedDepartments.has(dept)) {
+          console.log(`${date} ${dept} 已分配（可能是固定排班），跳过`)
+          return
+        }
+
+        if (doctorsWorking.length > 0) {
+          // 🔴 CRITICAL: 正常分配医生到科室
+          let bestDoctor = ''
+          const dutyDoctor = dutySchedule[date] // 获取当天的值班医生
+
+          // 优先级1: 值班医生（仅限第一个科室）
+          if (deptIndex === 0 && dutyDoctor &&
+              doctorsWorking.includes(dutyDoctor) &&
+              !doctorSchedule[dutyDoctor].shifts[date]) {
+            bestDoctor = dutyDoctor
+            console.log(`${date} ${dept} 优先分配值班医生: ${bestDoctor}`)
+          }
+          // 优先级2: 选择工作天数最少的医生
+          else {
+            let minWorkDays = Infinity
+            const candidates: string[] = []
+            for (const doctor of doctorsWorking) {
+              // 检查这个医生今天是否已经排过班
+              const alreadyHasShift = doctorSchedule[doctor].shifts[date] &&
+                                       (doctorSchedule[doctor].shifts[date].morning === 'work' ||
+                                        doctorSchedule[doctor].shifts[date].afternoon === 'work')
+
+              if (!alreadyHasShift) {
+                if (doctorWorkDays[doctor] < minWorkDays) {
+                  minWorkDays = doctorWorkDays[doctor]
+                  candidates.length = 0 // 清空候选列表
+                }
+                if (doctorWorkDays[doctor] === minWorkDays) {
+                  candidates.push(doctor)
+                }
+              }
+            }
+
+            // 随机选择一个候选医生
+            if (candidates.length > 0) {
+              bestDoctor = candidates[Math.floor(Math.random() * candidates.length)]
+            }
+          }
+
+          // 如果找到合适的医生，则分配
+          if (bestDoctor) {
+            schedule[date][dept].push({
+              doctor: bestDoctor,
+              shift: 'morning',
+              department: dept
+            })
+
+            schedule[date][dept].push({
+              doctor: bestDoctor,
+              shift: 'afternoon',
+              department: dept
+            })
+
+            // 🔴 CRITICAL: 设置全天班次
+            doctorSchedule[bestDoctor].shifts[date] = { morning: 'work', afternoon: 'work' }
+            doctorSchedule[bestDoctor].departmentsByDate[date] = { morning: dept, afternoon: dept }
+            doctorSchedule[bestDoctor].morningShifts.push(dept)
+            doctorSchedule[bestDoctor].afternoonShifts.push(dept)
+
+            // 统计天数：如果这个医生今天还没排过班，则天数+1
+            if (!doctorDailyWork[bestDoctor].has(date)) {
+              doctorDailyWork[bestDoctor].add(date)
+              doctorWorkDays[bestDoctor]++
+            }
+
+            console.log(`${date} ${dept} 分配给 ${bestDoctor}`)
+          } else {
+            console.log(`${date} ${dept} 没有找到合适的医生`)
+          }
         }
       })
-
-      // 🔴 CRITICAL: 以科室为中心，为每个科室的上午和下午分配医生
-      this.assignDepartmentsByShift(date, schedule, doctorSchedule, availableDoctors, departmentsForDay, dutySchedule, dates, dateIndex, doctorWorkDays, doctorDailyWork)
-
-      // 验证当天状态一致性
-      this.validateDayConsistency(date, schedule, doctorSchedule, availableDoctors, departmentsForDay, dutySchedule, dates)
     })
 
     // 计算上午班和下午班的天数
-    this.calculateShiftDays(doctorSchedule, dates)
-
-    console.log('🔴 白班分配完成')
-  }
-
-  /**
-   * 以科室为中心，为每个科室分配一个医生（上午+下午）
-   */
-  private assignDepartmentsByShift(
-    date: string,
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>,
-    availableDoctors: string[],
-    departmentsForDay: string[],
-    dutySchedule: Record<string, string>,
-    dates: string[],
-    dateIndex: number,
-    doctorWorkDays: Record<string, number>,
-    doctorDailyWork: Record<string, Set<string>>
-  ): void {
-    // 🔴 CRITICAL: 为每个科室分配一个医生（上午+下午）
-    for (const dept of departmentsForDay) {
-      // 检查科室是否已分配
-      const existingSlot = schedule[date][dept][0]
-      if (existingSlot) {
-        // 科室已分配，确保上午和下午都有
-        if (!schedule[date][dept].find(s => s.shift === 'morning')) {
-          this.setWork(existingSlot.doctor, date, dept, 'morning', schedule, doctorSchedule)
-        }
-        if (!schedule[date][dept].find(s => s.shift === 'afternoon')) {
-          this.setWork(existingSlot.doctor, date, dept, 'afternoon', schedule, doctorSchedule)
-        }
-        continue
-      }
-
-      // 🔴 CRITICAL: 找到可用的医生（前一天值班的医生下午可用）
-      const availableForDept = availableDoctors.filter(doctor => {
-        // 排除前一天值班的医生的上午
-        if (this.isDutyYesterday(doctor, date, dutySchedule, dates, dateIndex)) {
-          // 如果医生前一天值班，只允许下午工作
-          if (doctorSchedule[doctor]?.shifts[date]?.afternoon === 'work') {
-            return false  // 下午已分配
-          }
-          // 上午已休息，下午可用
-          return true
-        }
-
-        // 排除已分配的医生（上午或下午已分配）
-        if (doctorSchedule[doctor]?.shifts[date]?.morning === 'work') return false
-        if (doctorSchedule[doctor]?.shifts[date]?.afternoon === 'work') return false
-
-        return true
-      })
-
-      if (availableForDept.length === 0) {
-        console.log(`  ${date} ${dept} 没有可用医生`)
-        continue
-      }
-
-      // 选择班次最少的医生（轮询分配）
-      const selectedDoctor = this.selectDoctorByLeastShifts(availableForDept, doctorSchedule, dates, dateIndex)
-
-      // 检查医生是否前一天值班
-      const isDutyYesterday = this.isDutyYesterday(selectedDoctor, date, dutySchedule, dates, dateIndex)
-
-      if (isDutyYesterday) {
-        // 前一天值班的医生，只分配下午
-        this.setWork(selectedDoctor, date, dept, 'afternoon', schedule, doctorSchedule)
-        console.log(`  ${date} ${dept} 下午分配给 ${selectedDoctor}（前一天值班）`)
-      } else {
-        // 其他医生，分配全天（上午+下午）
-        this.setFullDayWork(selectedDoctor, date, dept, schedule, doctorSchedule)
-        console.log(`  ${date} ${dept} 分配给 ${selectedDoctor}`)
-      }
-
-      // 统计天数
-      if (!doctorDailyWork[selectedDoctor].has(date)) {
-        doctorDailyWork[selectedDoctor].add(date)
-        doctorWorkDays[selectedDoctor]++
-      }
-    }
-  }
-
-  /**
-   * 选择班次最少的医生
-   */
-  private selectDoctorByLeastShifts(
-    availableDoctors: string[],
-    doctorSchedule: Record<string, DoctorSchedule>,
-    dates: string[],
-    dateIndex: number
-  ): string {
-    // 计算每个医生到当前日期为止的班次数（上午+下午）
-    const doctorShifts: Record<string, number> = {}
-    availableDoctors.forEach(doctor => {
-      let totalShifts = 0
-      for (let i = 0; i <= dateIndex; i++) {
-        const date = dates[i]
-        if (doctorSchedule[doctor]?.shifts[date]?.morning === 'work') totalShifts++
-        if (doctorSchedule[doctor]?.shifts[date]?.afternoon === 'work') totalShifts++
-      }
-      doctorShifts[doctor] = totalShifts
-    })
-
-    // 选择班次最少的医生
-    const sortedDoctors = availableDoctors.sort((a, b) => doctorShifts[a] - doctorShifts[b])
-    return sortedDoctors[0]
-  }
-
-  /**
-   * 应用固定排班
-   */
-  private applyFixedSchedule(
-    doctor: string,
-    date: string,
-    fixedAssignment: {
-      morning: string | '休息' | '请假'
-      afternoon: string | '休息' | '请假'
-    },
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>,
-    dutyDoctor: string | undefined,
-    isWeekend: boolean,
-    departmentsForDay: string[]
-  ): void {
-    const { morning, afternoon } = fixedAssignment
-
-    // 🔴 CRITICAL: 固定排班优先级最高，即使是值班医生也要应用
-    // 如果是值班医生，仍然应用固定排班
-    if (dutyDoctor === doctor) {
-      console.log(`  ${date} ${doctor} 是值班医生，但仍然应用固定排班`)
-    }
-
-    // 如果包含"请假"，设置为休息
-    if (morning === '请假' || afternoon === '请假') {
-      if (!doctorSchedule[doctor].shifts[date]) {
-        doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-      }
-      if (morning === '请假') {
-        doctorSchedule[doctor].shifts[date].morning = 'off'
-      }
-      if (afternoon === '请假') {
-        doctorSchedule[doctor].shifts[date].afternoon = 'off'
-      }
-      doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
-      console.log(`  ${date} ${doctor} 固定排班设置为请假`)
-      return
-    }
-
-    // 如果包含"休息"，设置为休息
-    if (morning === '休息' || afternoon === '休息') {
-      if (!doctorSchedule[doctor].shifts[date]) {
-        doctorSchedule[doctor].shifts[date] = { morning: 'off', afternoon: 'off' }
-      }
-      if (morning === '休息') {
-        doctorSchedule[doctor].shifts[date].morning = 'off'
-      }
-      if (afternoon === '休息') {
-        doctorSchedule[doctor].shifts[date].afternoon = 'off'
-      }
-      doctorSchedule[doctor].departmentsByDate[date] = { morning: '', afternoon: '' }
-      console.log(`  ${date} ${doctor} 固定排班设置为休息`)
-      return
-    }
-
-    // 如果是科室，检查周末限制
-    if (isWeekend) {
-      const morningInvalid = !departmentsForDay.includes(morning)
-      const afternoonInvalid = !departmentsForDay.includes(afternoon)
-
-      if (morningInvalid || afternoonInvalid) {
-        console.log(`  ${date} ${doctor} 固定排班不在周末前4个科室内，跳过`)
-        return
-      }
-    }
-
-    // 应用科室排班（morning 和 afternoon 都是科室名称）
-    if (morning !== '休息' && morning !== '请假') {
-      this.setWork(doctor, date, morning, 'morning', schedule, doctorSchedule)
-      console.log(`  ${date} ${doctor} 固定排班设置为上午 ${morning}`)
-    }
-
-    if (afternoon !== '休息' && afternoon !== '请假') {
-      this.setWork(doctor, date, afternoon, 'afternoon', schedule, doctorSchedule)
-      console.log(`  ${date} ${doctor} 固定排班设置为下午 ${afternoon}`)
-    }
-  }
-
-  /**
-   * 分配值班医生到可用科室
-   */
-  private assignDutyDoctor(
-    doctor: string,
-    date: string,
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>,
-    departmentsForDay: string[]
-  ): void {
-    // 🔴 CRITICAL: 找到上午和下午可用的科室
-    const morningDepartment = departmentsForDay.find(dept => {
-      const morningSlot = schedule[date][dept].find(s => s.shift === 'morning')
-      return !morningSlot
-    })
-
-    const afternoonDepartment = departmentsForDay.find(dept => {
-      const afternoonSlot = schedule[date][dept].find(s => s.shift === 'afternoon')
-      return !afternoonSlot
-    })
-
-    if (!morningDepartment && !afternoonDepartment) {
-      console.log(`  ${date} 所有班次都已被分配，跳过值班医生 ${doctor}`)
-      return
-    }
-
-    // 分配值班医生到可用科室（上午和下午）
-    if (morningDepartment) {
-      this.setWork(doctor, date, morningDepartment, 'morning', schedule, doctorSchedule)
-      console.log(`  ${date} 值班医生 ${doctor} 上午分配到 ${morningDepartment}`)
-    }
-
-    if (afternoonDepartment) {
-      this.setWork(doctor, date, afternoonDepartment, 'afternoon', schedule, doctorSchedule)
-      console.log(`  ${date} 值班医生 ${doctor} 下午分配到 ${afternoonDepartment}`)
-    }
-  }
-
-  /**
-   * 自动填充：为医生分配到可用科室
-   */
-  private autoFill(
-    doctor: string,
-    date: string,
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>,
-    departmentsForDay: string[],
-    doctorWorkDays: Record<string, number>,
-    doctorDailyWork: Record<string, Set<string>>
-  ): void {
-    // 🔴 CRITICAL: 检查医生的上午是否已分配，如果没有，分配上午班次
-    const shift = doctorSchedule[doctor]?.shifts[date] || { morning: 'off', afternoon: 'off' }
-
-    if (shift.morning !== 'work') {
-      // 找到上午可用的科室（上午没有被分配医生的科室）
-      const availableMorningDepartment = departmentsForDay.find(dept => {
-        const morningSlot = schedule[date][dept].find(s => s.shift === 'morning')
-        return !morningSlot
-      })
-
-      if (availableMorningDepartment) {
-        this.setWork(doctor, date, availableMorningDepartment, 'morning', schedule, doctorSchedule)
-        console.log(`  ${date} 医生 ${doctor} 上午自动填充到 ${availableMorningDepartment}`)
-      }
-    }
-
-    // 🔴 CRITICAL: 检查医生的下午是否已分配，如果没有，分配下午班次
-    const shiftAfter = doctorSchedule[doctor]?.shifts[date] || { morning: 'off', afternoon: 'off' }
-
-    if (shiftAfter.afternoon !== 'work') {
-      // 找到下午可用的科室（下午没有被分配医生的科室）
-      const availableAfternoonDepartment = departmentsForDay.find(dept => {
-        const afternoonSlot = schedule[date][dept].find(s => s.shift === 'afternoon')
-        return !afternoonSlot
-      })
-
-      if (availableAfternoonDepartment) {
-        this.setWork(doctor, date, availableAfternoonDepartment, 'afternoon', schedule, doctorSchedule)
-        console.log(`  ${date} 医生 ${doctor} 下午自动填充到 ${availableAfternoonDepartment}`)
-      }
-    }
-
-    // 统计天数：如果这个医生今天还没排过班，则天数+1
-    if (!doctorDailyWork[doctor].has(date)) {
-      doctorDailyWork[doctor].add(date)
-      doctorWorkDays[doctor]++
-    }
-  }
-
-  /**
-   * 验证当天状态一致性
-   */
-  private validateDayConsistency(
-    date: string,
-    schedule: Record<string, Record<string, ScheduleSlot[]>>,
-    doctorSchedule: Record<string, DoctorSchedule>,
-    availableDoctors: string[],
-    departmentsForDay: string[],
-    dutySchedule: Record<string, string>,
-    dates: string[]
-  ): void {
-    // 验证1：每个科室的上午和下午各最多一个医生
-    for (const dept of departmentsForDay) {
-      const morningDoctors = schedule[date][dept].filter(s => s.shift === 'morning').map(s => s.doctor)
-      const afternoonDoctors = schedule[date][dept].filter(s => s.shift === 'afternoon').map(s => s.doctor)
-
-      const uniqueMorningDoctors = new Set(morningDoctors)
-      const uniqueAfternoonDoctors = new Set(afternoonDoctors)
-
-      if (uniqueMorningDoctors.size > 1) {
-        throw new Error(`${date} ${dept} 上午有多个医生：${Array.from(uniqueMorningDoctors).join(', ')}`)
-      }
-
-      if (uniqueAfternoonDoctors.size > 1) {
-        throw new Error(`${date} ${dept} 下午有多个医生：${Array.from(uniqueAfternoonDoctors).join(', ')}`)
-      }
-    }
-
-    // 🔴 CRITICAL: 验证2：值班医生必须有白班（除非前一天值班，第二天必须休息）
-    const dutyDoctor = dutySchedule[date]
-    if (dutyDoctor) {
-      const dateIndex = dates.indexOf(date)
-      const isDutyYesterday = dateIndex > 0 && dutySchedule[dates[dateIndex - 1]] === dutyDoctor
-
-      // 如果值班医生前一天值班，第二天必须休息，不需要白班
-      if (!isDutyYesterday) {
-        const shift = doctorSchedule[dutyDoctor]?.shifts[date]
-        if (!shift || (shift.morning !== 'work' && shift.afternoon !== 'work')) {
-          throw new Error(`${date} 值班医生 ${dutyDoctor} 没有白班`)
-        }
-      } else {
-        console.log(`  ${date} 值班医生 ${dutyDoctor} 前一天值班，第二天必须休息，跳过白班验证`)
-      }
-    }
-
-    // 验证3：前一天值班的医生今天不能上午工作，但可以下午工作
-    const dateIndex = dates.indexOf(date)
-    if (dateIndex > 0) {
-      const yesterday = dates[dateIndex - 1]
-      const yesterdayDutyDoctor = dutySchedule[yesterday]
-      if (yesterdayDutyDoctor) {
-        const shift = doctorSchedule[yesterdayDutyDoctor]?.shifts[date]
-        if (shift && shift.morning === 'work') {
-          throw new Error(`${date} 前一天值班医生 ${yesterdayDutyDoctor} 不能上午工作`)
-        }
-      }
-    }
-
-    console.log(`✅ ${date} 验证通过`)
-  }
-
-  /**
-   * 计算上午班和下午班的天数
-   */
-  private calculateShiftDays(
-    doctorSchedule: Record<string, DoctorSchedule>,
-    dates: string[]
-  ): void {
     Object.values(doctorSchedule).forEach(info => {
       // 统计上午班天数（排除值班当天）
       const morningDays = new Set<string>()
       dates.forEach(date => {
+        // 🔴 CRITICAL: 值班当天不计入上午班天数
         if (info.shifts[date]?.morning === 'work' && !info.nightShiftsByDate[date]) {
           morningDays.add(date)
         }
@@ -1088,11 +874,23 @@ export class ScheduleService {
       // 统计下午班天数（下午班和上午班同一天，排除值班当天）
       const afternoonDays = new Set<string>()
       dates.forEach(date => {
+        // 🔴 CRITICAL: 值班当天不计入下午班天数
         if (info.shifts[date]?.afternoon === 'work' && !info.nightShiftsByDate[date]) {
           afternoonDays.add(date)
         }
       })
       info.afternoonShiftDays = afternoonDays.size
+    })
+
+    console.log('日班分配完成，各医生工作天数:', doctorWorkDays)
+
+    // 🔴 CRITICAL: 打印值班医生的排班详情
+    console.log('🔴 值班医生排班详情:')
+    dates.forEach((date, index) => {
+      const dutyDoctor = dutySchedule[date]
+      if (dutyDoctor) {
+        console.log(`  ${date} 值班: ${dutyDoctor}, shifts[${date}] = ${doctorSchedule[dutyDoctor].shifts[date]}, departmentsByDate[${date}] = ${(doctorSchedule[dutyDoctor] as any).departmentsByDate[date]}`)
+      }
     })
   }
 
@@ -1102,7 +900,7 @@ export class ScheduleService {
   private validateRestDays(
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[],
-    availableDoctors: string[]
+    availableDoctors: string[]  // 只验证可用医生的休息天数
   ): string[] {
     const failedDoctors: string[] = []
 
@@ -1111,35 +909,19 @@ export class ScheduleService {
       const info = doctorSchedule[doctorName]
       if (!info) return
 
-      // 🔴 CRITICAL: 只验证实际有工作的医生（至少有1个班次的医生）
-      const hasWork = dates.some(date =>
+      // 计算工作天数（包括白班和夜班）
+      const workDays = dates.filter(date =>
         info.shifts[date] &&
         (info.shifts[date].morning === 'work' || info.shifts[date].afternoon === 'work')
-      )
-
-      // 如果医生没有工作，跳过验证
-      if (!hasWork) {
-        console.log(`${info.name}: 未分配任何工作，跳过休息天数验证`)
-        return
-      }
-
-      // 🔴 CRITICAL: 计算半天休息天数（上午或下午有一个是 'off' 就算半天休息）
-      const halfRestDays = dates.filter(date =>
-        info.shifts[date] &&
-        (info.shifts[date].morning === 'off' || info.shifts[date].afternoon === 'off')
       ).length
 
-      // 计算全天休息天数（上午和下午都是 'off'）
-      const fullRestDays = dates.filter(date =>
-        info.shifts[date] &&
-        info.shifts[date].morning === 'off' &&
-        info.shifts[date].afternoon === 'off'
-      ).length
+      // 休息天数 = 总天数 - 工作天数
+      const restDays = dates.length - workDays
 
-      console.log(`${info.name}: 全天休息天数=${fullRestDays}, 半天休息天数=${halfRestDays}`)
+      console.log(`${info.name}: 工作天数=${workDays}, 休息天数=${restDays}, shifts=${JSON.stringify(info.shifts)}`)
 
-      // 🔴 CRITICAL: 检查是否有至少 0.5 天的休息（半天休息也算）
-      if (halfRestDays < 0.5) {
+      // 检查休息天数是否不足
+      if (restDays < 1) {
         failedDoctors.push(info.name)
       }
     })
@@ -1149,12 +931,14 @@ export class ScheduleService {
 
   /**
    * 计算休息天数
+   * 🔴 CRITICAL: 统计总休息天数（包括值班后的休息日和普通的休息日）
    */
   private calculateRestDays(
     doctorSchedule: Record<string, DoctorSchedule>,
     dates: string[]
   ): void {
     Object.values(doctorSchedule).forEach(info => {
+      // 🔴 CRITICAL: 统计所有休息日的天数（上午和下午都休息才算1天，半天休息算0.5天）
       let restDays = 0
 
       dates.forEach(date => {
@@ -1176,7 +960,7 @@ export class ScheduleService {
   }
 
   /**
-   * 生成日期列表（从开始日期开始，共7天）
+   * 获取日期列表
    */
   private getDates(startDate: string, days: number): string[] {
     const dates: string[] = []
@@ -1185,198 +969,274 @@ export class ScheduleService {
     for (let i = 0; i < days; i++) {
       const date = new Date(start)
       date.setDate(start.getDate() + i)
-      dates.push(this.formatDate(date))
+      dates.push(date.toISOString().split('T')[0])
     }
 
     return dates
   }
 
   /**
-   * 格式化日期为 YYYY-MM-DD
-   */
-  private formatDate(date: Date): string {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
-  /**
-   * 获取带星期的日期字符串
+   * 获取日期和星期
    */
   private getDateWithWeek(date: string): string {
     const dateObj = new Date(date)
-    const dayOfWeek = dateObj.getDay()
     const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-    return `${date} ${dayNames[dayOfWeek]}`
+    const dayOfWeek = dateObj.getDay()
+
+    return `${date.split('-')[1]}-${date.split('-')[2]} ${dayNames[dayOfWeek]}`
   }
 
   /**
-   * 生成 Word 文档
+   * 生成Word文档
    */
-  async generateWordDocument(scheduleData: ScheduleData): Promise<Buffer> {
-    const { dates, datesWithWeek, departments, schedule, dutySchedule } = scheduleData
-
+  async generateWordDoc(scheduleData: ScheduleData, startDate: string): Promise<Buffer> {
     const doc = new Document({
       sections: [
         {
           properties: {},
           children: [
             new Paragraph({
-              text: '排班表',
-              heading: 'Heading1',
+              children: [
+                new TextRun({
+                  text: `医院排班表 (${startDate} 起一周)`,
+                  bold: true,
+                  size: 32
+                })
+              ],
               alignment: 'center',
-              spacing: {
-                after: 400,
-              },
+              spacing: { after: 200 }
             }),
-
             // 值班表
             new Paragraph({
-              text: '值班表',
-              heading: 'Heading2',
-              spacing: {
-                before: 400,
-                after: 200,
-              },
+              children: [
+                new TextRun({
+                  text: '夜间值班',
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: { before: 200, after: 100 }
             }),
-            ...this.createDutyTable(datesWithWeek, dutySchedule),
-
-            // 科室排班表
+            this.createDutyScheduleTable(scheduleData),
+            // 白班排班表
             new Paragraph({
-              text: '科室排班表',
-              heading: 'Heading2',
-              spacing: {
-                before: 400,
-                after: 200,
-              },
+              children: [
+                new TextRun({
+                  text: '白班排班（含上午/下午）',
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: { before: 400, after: 100 }
             }),
-            ...this.createDepartmentTable(datesWithWeek, departments, schedule),
-          ],
-        },
-      ],
+            this.createDayScheduleTable(scheduleData),
+            // 医生排班统计
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '医生排班统计',
+                  bold: true,
+                  size: 24
+                })
+              ],
+              spacing: { before: 400, after: 100 }
+            }),
+            this.createDoctorStatsTable(scheduleData)
+          ]
+        }
+      ]
     })
 
-    const buffer = await Packer.toBuffer(doc)
-    return buffer
+    return await Packer.toBuffer(doc)
   }
 
   /**
    * 创建值班表
    */
-  private createDutyTable(datesWithWeek: string[], dutySchedule: Record<string, string>): Paragraph[] {
-    const rows: TableRow[] = []
+  private createDutyScheduleTable(scheduleData: ScheduleData): Table {
+    const { dates, dutySchedule, datesWithWeek } = scheduleData
 
-    // 表头
-    const headerCells = [
-      new TableCell({
-        children: [new Paragraph({ text: '日期', alignment: 'center' })],
-        width: { size: 40, type: WidthType.PERCENTAGE },
-      }),
-      new TableCell({
-        children: [new Paragraph({ text: '值班医生', alignment: 'center' })],
-        width: { size: 60, type: WidthType.PERCENTAGE },
-      }),
-    ]
-    rows.push(new TableRow({ children: headerCells, tableHeader: true }))
-
-    // 数据行
-    datesWithWeek.forEach(dateWithWeek => {
-      const date = dateWithWeek.split(' ')[0]
-      const dutyDoctor = dutySchedule[date] || ''
-
-      const cells = [
-        new TableCell({
-          children: [new Paragraph({ text: dateWithWeek, alignment: 'center' })],
-          width: { size: 40, type: WidthType.PERCENTAGE },
-        }),
-        new TableCell({
-          children: [new Paragraph({ text: dutyDoctor, alignment: 'center' })],
-          width: { size: 60, type: WidthType.PERCENTAGE },
-        }),
-      ]
-      rows.push(new TableRow({ children: cells }))
-    })
-
-    const table = new Table({
+    return new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: rows,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] }),
+              ],
+              width: { size: 50, type: WidthType.PERCENTAGE },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '值班医生', bold: true })] }),
+              ],
+              width: { size: 50, type: WidthType.PERCENTAGE },
+            }),
+          ],
+        }),
+        ...dates.map(
+          (date) =>
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(datesWithWeek[dates.indexOf(date)])] })],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(dutySchedule[date] || '-')] })],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                }),
+              ],
+            })
+        ),
+      ],
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 1 },
-        bottom: { style: BorderStyle.SINGLE, size: 1 },
-        left: { style: BorderStyle.SINGLE, size: 1 },
-        right: { style: BorderStyle.SINGLE, size: 1 },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+        top: { style: BorderStyle.SINGLE },
+        bottom: { style: BorderStyle.SINGLE },
+        left: { style: BorderStyle.SINGLE },
+        right: { style: BorderStyle.SINGLE },
       },
     })
-
-    return [new Paragraph({ children: [table] })]
   }
 
   /**
-   * 创建科室排班表
+   * 创建白班排班表
    */
-  private createDepartmentTable(
-    datesWithWeek: string[],
-    departments: string[],
-    schedule: Record<string, Record<string, ScheduleSlot[]>>
-  ): Paragraph[] {
-    const rows: TableRow[] = []
+  private createDayScheduleTable(scheduleData: ScheduleData): Table {
+    const { dates, datesWithWeek, departments, schedule } = scheduleData
 
-    // 表头
-    const headerCells = [
-      new TableCell({
-        children: [new Paragraph({ text: '日期', alignment: 'center' })],
-        width: { size: 15, type: WidthType.PERCENTAGE },
-      }),
-      ...departments.map(dept =>
-        new TableCell({
-          children: [new Paragraph({ text: dept, alignment: 'center' })],
-          width: { size: 85 / departments.length, type: WidthType.PERCENTAGE },
-        })
-      ),
-    ]
-    rows.push(new TableRow({ children: headerCells, tableHeader: true }))
-
-    // 数据行
-    datesWithWeek.forEach(dateWithWeek => {
-      const date = dateWithWeek.split(' ')[0]
-
-      const cells = [
-        new TableCell({
-          children: [new Paragraph({ text: dateWithWeek, alignment: 'center' })],
-          width: { size: 15, type: WidthType.PERCENTAGE },
-        }),
-        ...departments.map(dept => {
-          const slots = schedule[date]?.[dept] || []
-          const doctors = slots
-            .filter(slot => slot.shift === 'morning')
-            .map(slot => slot.doctor)
-            .join('、')
-
-          return new TableCell({
-            children: [new Paragraph({ text: doctors || '', alignment: 'center' })],
-            width: { size: 85 / departments.length, type: WidthType.PERCENTAGE },
-          })
-        }),
-      ]
-      rows.push(new TableRow({ children: cells }))
-    })
-
-    const table = new Table({
+    return new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: rows,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '科室', bold: true })] }),
+              ],
+              width: { size: 15, type: WidthType.PERCENTAGE },
+            }),
+            ...dates.map(
+              (date) =>
+                new TableCell({
+                  children: [
+                    new Paragraph({ children: [new TextRun({ text: datesWithWeek[dates.indexOf(date)], bold: true, size: 18 })] }),
+                  ],
+                  width: { size: 85 / dates.length, type: WidthType.PERCENTAGE },
+                })
+            ),
+          ],
+        }),
+        ...departments.map(
+          (department) =>
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: department, bold: true })] })],
+                  width: { size: 15, type: WidthType.PERCENTAGE },
+                }),
+                ...dates.map((date) => {
+                  const slots = schedule[date]?.[department] || []
+                  const doctors = slots.map((s) => {
+                    const suffix = s.shift === 'morning' ? '（上午）' : '（下午）'
+                    return `${s.doctor}${suffix}`
+                  }).join('、')
+                  return new TableCell({
+                    children: [new Paragraph({ children: [new TextRun(doctors || '-')] })],
+                    width: { size: 85 / dates.length, type: WidthType.PERCENTAGE },
+                  })
+                }),
+              ],
+            })
+        ),
+      ],
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 1 },
-        bottom: { style: BorderStyle.SINGLE, size: 1 },
-        left: { style: BorderStyle.SINGLE, size: 1 },
-        right: { style: BorderStyle.SINGLE, size: 1 },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1 },
+        top: { style: BorderStyle.SINGLE },
+        bottom: { style: BorderStyle.SINGLE },
+        left: { style: BorderStyle.SINGLE },
+        right: { style: BorderStyle.SINGLE },
       },
     })
+  }
 
-    return [new Paragraph({ children: [table] })]
+  /**
+   * 创建医生统计表
+   */
+  private createDoctorStatsTable(scheduleData: ScheduleData): Table {
+    const { doctorSchedule } = scheduleData
+
+    return new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '医生', bold: true })] }),
+              ],
+              width: { size: 20, type: WidthType.PERCENTAGE },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '夜班次数', bold: true })] }),
+              ],
+              width: { size: 20, type: WidthType.PERCENTAGE },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '上午班(天)', bold: true })] }),
+              ],
+              width: { size: 20, type: WidthType.PERCENTAGE },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '下午班(天)', bold: true })] }),
+              ],
+              width: { size: 20, type: WidthType.PERCENTAGE },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '休息天数', bold: true })] }),
+              ],
+              width: { size: 20, type: WidthType.PERCENTAGE },
+            }),
+          ],
+        }),
+        ...Object.values(doctorSchedule).map(
+          (info) =>
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(info.name)] })],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(String(info.nightShifts))] })],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(String(info.morningShiftDays || info.morningShifts.length))] })],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(String(info.afternoonShiftDays || info.afternoonShifts.length))] })],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun(String(info.restDays))] })],
+                  width: { size: 20, type: WidthType.PERCENTAGE },
+                }),
+              ],
+            })
+        ),
+      ],
+      borders: {
+        top: { style: BorderStyle.SINGLE },
+        bottom: { style: BorderStyle.SINGLE },
+        left: { style: BorderStyle.SINGLE },
+        right: { style: BorderStyle.SINGLE },
+      },
+    })
   }
 }

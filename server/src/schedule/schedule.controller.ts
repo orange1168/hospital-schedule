@@ -3,7 +3,6 @@ import { ScheduleService, FixedSchedule } from './schedule.service'
 
 interface GenerateScheduleDto {
   startDate: string
-  departmentNames?: string[] // 科室列表
   doctors?: string[]
   dutyStartDoctor?: string
   leaveRequests?: any[] // ✅ 修改：使用 leaveRequests 匹配前端
@@ -25,14 +24,7 @@ export class ScheduleController {
   @Post('generate')
   async generateSchedule(@Body() body: GenerateScheduleDto) {
     console.log('收到排班生成请求:', body)
-    const { startDate, departmentNames, doctors, dutyStartDoctor, leaveRequests, fixedSchedule } = body
-
-    console.log('🔴🔴🔴 Controller 收到参数:')
-    console.log('  startDate:', startDate)
-    console.log('  departmentNames:', departmentNames)
-    console.log('  doctors:', doctors)
-    console.log('  dutyStartDoctor:', dutyStartDoctor)
-    console.log('  fixedSchedule:', fixedSchedule)
+    const { startDate, doctors, dutyStartDoctor, leaveRequests, fixedSchedule } = body
 
     if (!startDate) {
       return {
@@ -48,8 +40,7 @@ export class ScheduleController {
         doctors,
         dutyStartDoctor,
         leaveRequests, // ✅ 修改：使用 leaveRequests
-        fixedSchedule, // 固定排班数据
-        departmentNames // 科室列表
+        fixedSchedule // 固定排班数据
       )
       console.log('排班生成成功:', scheduleData)
 
@@ -85,7 +76,7 @@ export class ScheduleController {
     }
 
     try {
-      const buffer = await this.scheduleService.generateWordDocument(scheduleData)
+      const buffer = await this.scheduleService.generateWordDoc(scheduleData, startDate)
       const base64 = buffer.toString('base64')
 
       console.log('文档生成成功，大小:', buffer.length, 'bytes')
