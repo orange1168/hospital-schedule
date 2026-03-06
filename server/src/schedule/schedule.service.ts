@@ -282,7 +282,7 @@ export class ScheduleService {
       doctors,
       dates,
       datesWithWeek,
-      this.departments,
+      selectedDepartments,
       dutySchedule
     )
   }
@@ -697,9 +697,18 @@ export class ScheduleService {
     doctors: Doctor[],
     dates: string[],
     datesWithWeek: string[],
-    departments: string[],
+    selectedDepartments: SelectedDepartments,
     dutySchedule: Record<string, string>
   ): ScheduleData {
+    // 🔴 从 selectedDepartments 中提取所有唯一的科室名称
+    const allDepartments = new Set<string>()
+    Object.values(selectedDepartments).forEach(dayDepts => {
+      dayDepts.forEach(dept => allDepartments.add(dept))
+    })
+    const departments = Array.from(allDepartments)
+
+    console.log('🔴 所有科室:', departments)
+
     const schedule: Record<string, Record<string, ScheduleSlot[]>> = {}
     dates.forEach(date => {
       schedule[date] = {}
@@ -728,40 +737,47 @@ export class ScheduleService {
         const dayName = this.getDayName(date)
         const shift = doctor.schedule[dayName]
 
+        // 🔴 初始化 departmentsByDate[date]，确保所有医生的所有日期都有完整数据
+        if (!doctorSchedule[doctor.name].departmentsByDate[date]) {
+          doctorSchedule[doctor.name].departmentsByDate[date] = {
+            morning: '休息',
+            afternoon: '休息'
+          }
+        }
+
         // 设置shifts
         if (shift.morning === '休息' || shift.morning === '请假') {
           doctorSchedule[doctor.name].shifts[date] = {
             morning: 'off',
             afternoon: shift.afternoon === '休息' || shift.afternoon === '请假' ? 'off' : 'work'
           }
+          // 🔴 设置 departmentsByDate
+          doctorSchedule[doctor.name].departmentsByDate[date].morning = shift.morning
         } else if (shift.morning !== '') {
           doctorSchedule[doctor.name].shifts[date] = {
             morning: 'work',
             afternoon: shift.afternoon === '休息' || shift.afternoon === '请假' ? 'off' : 'work'
           }
-        } else if (shift.afternoon === '休息' || shift.afternoon === '请假') {
-          doctorSchedule[doctor.name].shifts[date] = {
-            morning: 'off',
-            afternoon: 'off'
-          }
-        }
-
-        // 设置departmentsByDate
-        if (shift.morning !== '' && shift.morning !== '休息' && shift.morning !== '请假') {
-          if (!doctorSchedule[doctor.name].departmentsByDate[date]) {
-            doctorSchedule[doctor.name].departmentsByDate[date] = { morning: '', afternoon: '' }
-          }
+          // 🔴 设置 departmentsByDate
           doctorSchedule[doctor.name].departmentsByDate[date].morning = shift.morning
           doctorSchedule[doctor.name].morningShifts.push(shift.morning)
+        } else {
+          // 🔴 shift.morning 是空字符串，设置为 "休息"
+          doctorSchedule[doctor.name].shifts[date] = {
+            morning: 'off',
+            afternoon: shift.afternoon === '休息' || shift.afternoon === '请假' ? 'off' : 'work'
+          }
+          // departmentsByDate[date].morning 已经在初始化时设置为 "休息"
         }
 
-        if (shift.afternoon !== '' && shift.afternoon !== '休息' && shift.afternoon !== '请假') {
-          if (!doctorSchedule[doctor.name].departmentsByDate[date]) {
-            doctorSchedule[doctor.name].departmentsByDate[date] = { morning: '', afternoon: '' }
-          }
+        // 🔴 处理下午
+        if (shift.afternoon === '休息' || shift.afternoon === '请假') {
+          doctorSchedule[doctor.name].departmentsByDate[date].afternoon = shift.afternoon
+        } else if (shift.afternoon !== '') {
           doctorSchedule[doctor.name].departmentsByDate[date].afternoon = shift.afternoon
           doctorSchedule[doctor.name].afternoonShifts.push(shift.afternoon)
         }
+        // 🔴 shift.afternoon 是空字符串，departmentsByDate[date].afternoon 已经在初始化时设置为 "休息"
 
         // 添加到schedule数据结构
         if (shift.morning !== '' && shift.morning !== '休息' && shift.morning !== '请假') {
