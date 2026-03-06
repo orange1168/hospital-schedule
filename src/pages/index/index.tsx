@@ -509,12 +509,12 @@ const IndexPage = () => {
         if (env === Taro.ENV_TYPE.WEAPP) {
           // 小程序端下载
           try {
-            // 先提示用户如何保存
+            // 先提示用户如何保存（更详细的说明）
             Taro.showModal({
               title: '保存文档到手机',
-              content: '文档即将打开。请点击右上角"..."菜单，选择"用其他应用打开"或"保存到手机"，即可将文档保存到手机存储中',
+              content: '文档即将在微信中预览。\n\n重要提示：\n文档打开后，请点击【右上角的三个点 ···】菜单，然后选择【用其他应用打开】或【保存到手机】，即可将文档保存到手机存储中。',
               showCancel: false,
-              confirmText: '知道了',
+              confirmText: '打开文档',
               success: () => {
                 // 用户点击确认后，打开文档
                 const fs = Taro.getFileSystemManager()
@@ -531,6 +531,7 @@ const IndexPage = () => {
                     Taro.openDocument({
                       filePath,
                       fileType: 'docx',
+                      showMenu: true, // 确保显示右上角菜单
                       success: () => {
                         console.log('文档打开成功')
                       },
@@ -538,7 +539,8 @@ const IndexPage = () => {
                         console.error('文档打开失败:', error)
                         Taro.showToast({
                           title: '文档打开失败',
-                          icon: 'none'
+                          icon: 'none',
+                          duration: 3000
                         })
                       }
                     })
@@ -547,7 +549,8 @@ const IndexPage = () => {
                     console.error('文件写入失败:', error)
                     Taro.showToast({
                       title: '文件写入失败',
-                      icon: 'none'
+                      icon: 'none',
+                      duration: 3000
                     })
                   }
                 })
@@ -557,7 +560,8 @@ const IndexPage = () => {
             console.error('小程序下载失败:', error)
             Taro.showToast({
               title: '下载失败',
-              icon: 'none'
+              icon: 'none',
+              duration: 3000
             })
           }
         } else if (env === Taro.ENV_TYPE.WEB) {
