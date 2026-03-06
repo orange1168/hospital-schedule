@@ -1,4 +1,4 @@
-import { View, Text, Checkbox, ScrollView, Button } from '@tarojs/components'
+import { View, Text, ScrollView, Button } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import './DepartmentSelector.css'
 
@@ -96,58 +96,50 @@ const DepartmentSelector = ({ visible, onClose, selectedDepartments, onDepartmen
   }
 
   return (
-    <View className="department-selector">
-      <View className="department-selector-header">
-        <Text className="department-selector-title">科室选择</Text>
-        <View className="department-selector-actions">
+    <View className="department-selector-overlay">
+      <View className="department-selector-modal">
+        <View className="department-selector-header">
+          <Text className="department-selector-title">科室选择</Text>
+          <View className="department-selector-close" onClick={onClose}>
+            <Text className="department-selector-close-icon">×</Text>
+          </View>
+        </View>
+
+        <View className="department-selector-toolbar">
           <Button
             className="department-selector-reset-btn"
             size="mini"
             onClick={resetToDefault}
           >
-            重置
+            重置为默认
           </Button>
-          <Button
-            className="department-selector-close-btn"
-            size="mini"
-            onClick={onClose}
-          >
-            关闭
-          </Button>
+          <Text className="department-selector-tip">每天至少选择4个科室</Text>
         </View>
-      </View>
 
-      <ScrollView className="department-selector-content" scrollY>
-        {days.map((day) => (
-          <View key={day.key} className="department-selector-day">
-            <View className="department-selector-day-header">
-              <Text className="department-selector-day-title">{day.label}</Text>
-              <Text className="department-selector-day-count">
-                已选择：{selectedDepartments[day.key as keyof typeof selectedDepartments].length}个
-              </Text>
-            </View>
-            <View className="department-selector-departments">
-              {DEPARTMENTS.map((dept) => (
-                <View
-                  key={dept}
-                  className="department-checkbox-wrapper"
-                  onClick={() => handleToggleDepartment(day.key, dept)}
-                >
-                  <Checkbox
-                    value={dept}
-                    checked={selectedDepartments[day.key as keyof typeof selectedDepartments].includes(dept)}
-                    color="#1890ff"
-                  />
-                  <Text className="department-checkbox-label">{dept}</Text>
+        <ScrollView className="department-selector-content" scrollY>
+          {days.map((day) => (
+            <View key={day.key} className="department-selector-day">
+              <View className="department-selector-day-header">
+                <Text className="department-selector-day-title">{day.label}</Text>
+                <View className="department-selector-day-count">
+                  <Text className="count-label">已选</Text>
+                  <Text className="count-number">{selectedDepartments[day.key as keyof typeof selectedDepartments].length}</Text>
                 </View>
-              ))}
+              </View>
+              <View className="department-selector-departments">
+                {DEPARTMENTS.map((dept) => (
+                  <View
+                    key={dept}
+                    className={`department-checkbox-wrapper ${selectedDepartments[day.key as keyof typeof selectedDepartments].includes(dept) ? 'checked' : ''}`}
+                    onClick={() => handleToggleDepartment(day.key, dept)}
+                  >
+                    <Text className="department-checkbox-text">{dept}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View className="department-selector-footer">
-        <Text className="department-selector-tip">说明：每天至少选择4个科室，每次重置为默认值</Text>
+          ))}
+        </ScrollView>
       </View>
     </View>
   )
