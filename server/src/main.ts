@@ -32,7 +32,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   // 2. 解析端口
-  const port = parsePort();
+  const port = process.env.PORT || parsePort();
   try {
     await app.listen(port);
     console.log(`Server running on http://localhost:${port}`);
