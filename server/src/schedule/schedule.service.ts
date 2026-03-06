@@ -555,6 +555,19 @@ export class ScheduleService {
         }
       })
 
+      // Step 5: 为所有空位的医生赋值"休息"（包括值班医生分配失败的情况）
+      doctors.forEach(doctor => {
+        const schedule = doctor.schedule[day.dayOfWeek]
+        if (schedule.morning === '') {
+          schedule.morning = '休息'
+          console.log(`  ✅ ${doctor.name} 上午空位赋值休息`)
+        }
+        if (schedule.afternoon === '') {
+          schedule.afternoon = '休息'
+          console.log(`  ✅ ${doctor.name} 下午空位赋值休息`)
+        }
+      })
+
       console.log(`🔴 ===== ${day.date} (${day.dayOfWeek}) 排班完成 =====`)
     })
 
