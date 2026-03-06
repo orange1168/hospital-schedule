@@ -501,12 +501,61 @@ const IndexPage = () => {
       console.log('文档下载响应:', res.data)
 
       if (res.data.code === 200) {
-        const isH5 = Taro.getEnv() === 'WEB'
-        if (isH5) {
-          const base64Data = res.data.data.fileData
+        const base64Data = res.data.data.fileData
+        const fileName = res.data.data.fileName
+
+        const env = Taro.getEnv()
+        
+        if (env === Taro.ENV_TYPE.WEAPP) {
+          // 小程序端下载
+          try {
+            // 使用微信小程序的文件系统管理器
+            const fs = Taro.getFileSystemManager()
+            const filePath = `${Taro.env.USER_DATA_PATH}/${fileName}`
+            
+            // 将 base64 写入文件
+            fs.writeFile({
+              filePath,
+              data: base64Data,
+              encoding: 'base64',
+              success: () => {
+                console.log('文件写入成功:', filePath)
+                // 打开文档
+                Taro.openDocument({
+                  filePath,
+                  fileType: 'docx',
+                  success: () => {
+                    console.log('文档打开成功')
+                  },
+                  fail: (error) => {
+                    console.error('文档打开失败:', error)
+                    Taro.showToast({
+                      title: '文档打开失败',
+                      icon: 'none'
+                    })
+                  }
+                })
+              },
+              fail: (error) => {
+                console.error('文件写入失败:', error)
+                Taro.showToast({
+                  title: '文件写入失败',
+                  icon: 'none'
+                })
+              }
+            })
+          } catch (error) {
+            console.error('小程序下载失败:', error)
+            Taro.showToast({
+              title: '下载失败',
+              icon: 'none'
+            })
+          }
+        } else if (env === Taro.ENV_TYPE.WEB) {
+          // H5 端下载
           const link = document.createElement('a')
           link.href = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${base64Data}`
-          link.download = `排班表_${startDate}.docx`
+          link.download = fileName
           link.click()
           Taro.showToast({
             title: '文档下载成功',
@@ -514,7 +563,7 @@ const IndexPage = () => {
           })
         } else {
           Taro.showToast({
-            title: '请在H5端下载文档',
+            title: '当前环境不支持下载',
             icon: 'none'
           })
         }
