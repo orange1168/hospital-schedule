@@ -31,8 +31,8 @@ async function bootstrap() {
   // 1. 开启优雅关闭 Hooks (关键!)
   app.enableShutdownHooks();
 
-  // 2. 解析端口
-  const port = parsePort();
+  // 2. 解析端口（优先使用 Railway 的 PORT 环境变量）
+  const port = process.env.PORT || parsePort();
   try {
     await app.listen(port);
     console.log(`Server running on http://localhost:${port}`);
