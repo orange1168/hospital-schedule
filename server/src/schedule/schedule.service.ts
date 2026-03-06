@@ -75,77 +75,13 @@ class Doctor {
   }
 }
 
-// 科室类
-class Department {
-  name: string
-  morningOccupied: boolean
-  afternoonOccupied: boolean
-  morningDoctor: string | null
-  afternoonDoctor: string | null
-
-  constructor(name: string) {
-    this.name = name
-    this.morningOccupied = false
-    this.afternoonOccupied = false
-    this.morningDoctor = null
-    this.afternoonDoctor = null
-  }
-
-  /**
-   * 检查是否全天空闲
-   */
-  isFullDayAvailable(): boolean {
-    return !this.morningOccupied && !this.afternoonOccupied
-  }
-
-  /**
-   * 检查上午是否空闲
-   */
-  isMorningAvailable(): boolean {
-    return !this.morningOccupied
-  }
-
-  /**
-   * 检查下午是否空闲
-   */
-  isAfternoonAvailable(): boolean {
-    return !this.afternoonOccupied
-  }
-
-  /**
-   * 分配全天医生
-   */
-  assignFullDay(doctorName: string): void {
-    this.morningOccupied = true
-    this.afternoonOccupied = true
-    this.morningDoctor = doctorName
-    this.afternoonDoctor = doctorName
-  }
-
-  /**
-   * 分配上午医生
-   */
-  assignMorning(doctorName: string): void {
-    this.morningOccupied = true
-    this.morningDoctor = doctorName
-  }
-
-  /**
-   * 分配下午医生
-   */
-  assignAfternoon(doctorName: string): void {
-    this.afternoonOccupied = true
-    this.afternoonDoctor = doctorName
-  }
-}
-
 // 天类
 class Day {
   date: string
   dayOfWeek: string
   dutyDoctor: string | null
-  departmentPool: Department[]
-  doctorPool: Doctor[]
+  departmentPool: string[]  // 科室池：["1诊室", "2诊室", ...]
+  doctorPool: string[]      // 医生池：["李茜", "姜维", ...]
 
   constructor(date: string, dayOfWeek: string) {
     this.date = date
@@ -159,21 +95,53 @@ class Day {
    * 初始化科室池
    */
   initDepartmentPool(departmentNames: string[]): void {
-    this.departmentPool = departmentNames.map(name => new Department(name))
+    this.departmentPool = [...departmentNames]
   }
 
   /**
    * 初始化医生池
    */
-  initDoctorPool(doctors: Doctor[]): void {
-    this.doctorPool = [...doctors]
+  initDoctorPool(doctorNames: string[]): void {
+    this.doctorPool = [...doctorNames]
+  }
+
+  /**
+   * 从科室池中随机选择一个科室
+   */
+  randomDepartment(): string | null {
+    if (this.departmentPool.length === 0) {
+      return null
+    }
+    const randomIndex = Math.floor(Math.random() * this.departmentPool.length)
+    return this.departmentPool[randomIndex]
+  }
+
+  /**
+   * 从科室池中移除科室
+   */
+  removeDepartment(department: string): void {
+    const index = this.departmentPool.indexOf(department)
+    if (index !== -1) {
+      this.departmentPool.splice(index, 1)
+    }
+  }
+
+  /**
+   * 从医生池中随机选择一个医生
+   */
+  randomDoctor(): string | null {
+    if (this.doctorPool.length === 0) {
+      return null
+    }
+    const randomIndex = Math.floor(Math.random() * this.doctorPool.length)
+    return this.doctorPool[randomIndex]
   }
 
   /**
    * 从医生池中移除医生
    */
-  removeDoctor(doctor: Doctor): void {
-    const index = this.doctorPool.findIndex(d => d.id === doctor.id)
+  removeDoctor(doctorName: string): void {
+    const index = this.doctorPool.indexOf(doctorName)
     if (index !== -1) {
       this.doctorPool.splice(index, 1)
     }
@@ -455,17 +423,11 @@ export class ScheduleService {
           if (morning === '休息' || morning === '请假') {
             doctor.schedule[day.dayOfWeek].morning = morning
           } else {
-            const dept = day.departmentPool.find(d => d.name === morning)
-            if (dept) {
-              if (dept.morningOccupied) {
-                console.log(`  ⚠️ ${morning} 上午已被占用，${doctorName} 无法固定`)
-              } else {
-                dept.morningOccupied = true
-                dept.morningDoctor = doctorName
-                doctor.schedule[day.dayOfWeek].morning = morning
-                doctor.workDays++
-              }
-            }
+            // 从科室池中移除该科室
+            day.removeDepartment(morning)
+            doctor.schedule[day.dayOfWeek].morning = morning
+            doctor.workDays++
+            console.log(`  ✅ 固定排班：${doctorName} ${day.date} 上午 ${morning}`)
           }
         }
 
@@ -474,17 +436,11 @@ export class ScheduleService {
           if (afternoon === '休息' || afternoon === '请假') {
             doctor.schedule[day.dayOfWeek].afternoon = afternoon
           } else {
-            const dept = day.departmentPool.find(d => d.name === afternoon)
-            if (dept) {
-              if (dept.afternoonOccupied) {
-                console.log(`  ⚠️ ${afternoon} 下午已被占用，${doctorName} 无法固定`)
-              } else {
-                dept.afternoonOccupied = true
-                dept.afternoonDoctor = doctorName
-                doctor.schedule[day.dayOfWeek].afternoon = afternoon
-                doctor.workDays++
-              }
-            }
+            // 从科室池中移除该科室
+            day.removeDepartment(afternoon)
+            doctor.schedule[day.dayOfWeek].afternoon = afternoon
+            doctor.workDays++
+            console.log(`  ✅ 固定排班：${doctorName} ${day.date} 下午 ${afternoon}`)
           }
         }
       })
@@ -506,33 +462,37 @@ export class ScheduleService {
   ): void {
     days.forEach((day, index) => {
       console.log(`\n🔴 ===== ${day.date} (${day.dayOfWeek}) 排班 =====`)
+      console.log(`  📊 初始科室池: [${day.departmentPool.join(', ')}]`)
 
       // Step 1: 值班医生先选科室
       const dutyDoctorName = dutySchedule[day.date]
       if (dutyDoctorName) {
         const dutyDoctor = doctors.find(d => d.name === dutyDoctorName)
         if (dutyDoctor) {
-          // 从科室池找一个全天空闲的科室
-          const availableDept = day.departmentPool.find(dept => dept.isFullDayAvailable())
-          if (availableDept) {
-            availableDept.assignFullDay(dutyDoctorName)
-            dutyDoctor.schedule[day.dayOfWeek] = { morning: availableDept.name, afternoon: availableDept.name }
+          // 从科室池中随机选择一个科室
+          const selectedDept = day.randomDepartment()
+          if (selectedDept) {
+            // 从科室池中移除该科室
+            day.removeDepartment(selectedDept)
+            // 设置值班医生
+            dutyDoctor.schedule[day.dayOfWeek] = { morning: selectedDept, afternoon: selectedDept }
             dutyDoctor.workDays++
-            day.removeDoctor(dutyDoctor)
-            console.log(`  ✅ 值班医生 ${dutyDoctorName} 分配到 ${availableDept.name}（全天）`)
+            dutyDoctor.consecutiveWorkDays++
+            console.log(`  ✅ 值班医生 ${dutyDoctorName} 分配到 ${selectedDept}（全天）`)
+            console.log(`  📊 剩余科室池: [${day.departmentPool.join(', ')}]`)
           } else {
-            console.log(`  ⚠️ 没有全天空闲的科室给值班医生 ${dutyDoctorName}`)
+            console.log(`  ⚠️ 科室池为空，值班医生 ${dutyDoctorName} 无法分配科室`)
           }
         }
       }
 
-      // Step 2: 初始化医生池（移除休息、请假、已分配的医生）
-      day.initDoctorPool(doctors.filter(doctor => {
+      // Step 2: 初始化医生池（筛选可用医生）
+      const availableDoctors = doctors.filter(doctor => {
         // 移除请假的医生
         if (leaveMap[doctor.name] && (leaveMap[doctor.name].length === 0 || leaveMap[doctor.name].includes(day.date))) {
           return false
         }
-        // 移除值班医生（已分配）
+        // 移除值班医生（已分配科室）
         if (doctor.dutyDate === day.date) {
           return false
         }
@@ -546,60 +506,48 @@ export class ScheduleService {
           return false
         }
         return true
-      }))
-
-      console.log(`  📊 医生池: ${day.doctorPool.map(d => d.name).join(', ')}`)
-
-      // Step 3: 从第一个科室到最后一个科室选医生
-      day.departmentPool.forEach(dept => {
-        // 科室全天空闲：选择一个医生，全天在该科室
-        if (dept.isFullDayAvailable()) {
-          if (day.doctorPool.length > 0) {
-            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
-            if (doctor) {
-              dept.assignFullDay(doctor.name)
-              doctor.schedule[day.dayOfWeek] = { morning: dept.name, afternoon: dept.name }
-              doctor.workDays++
-              doctor.consecutiveWorkDays++
-              day.removeDoctor(doctor)
-              console.log(`  ✅ ${dept.name} 分配给 ${doctor.name}（全天）`)
-            }
-          }
-        } else if (dept.isMorningAvailable()) {
-          // 科室下午被占用：只选择上午医生
-          if (day.doctorPool.length > 0) {
-            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
-            if (doctor) {
-              dept.assignMorning(doctor.name)
-              doctor.schedule[day.dayOfWeek].morning = dept.name
-              doctor.workDays++
-              doctor.consecutiveWorkDays++
-              day.removeDoctor(doctor)
-              console.log(`  ✅ ${dept.name} 上午分配给 ${doctor.name}`)
-            }
-          }
-        } else if (dept.isAfternoonAvailable()) {
-          // 科室上午被占用：只选择下午医生
-          if (day.doctorPool.length > 0) {
-            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
-            if (doctor) {
-              dept.assignAfternoon(doctor.name)
-              doctor.schedule[day.dayOfWeek].afternoon = dept.name
-              doctor.workDays++
-              doctor.consecutiveWorkDays++
-              day.removeDoctor(doctor)
-              console.log(`  ✅ ${dept.name} 下午分配给 ${doctor.name}`)
-            }
-          }
-        }
       })
 
+      day.initDoctorPool(availableDoctors.map(d => d.name))
+      console.log(`  📊 医生池: [${day.doctorPool.join(', ')}]`)
+
+      // Step 3: 科室选医生（从第一个科室到最后一个）
+      while (day.departmentPool.length > 0 && day.doctorPool.length > 0) {
+        // 从科室池中随机选择一个科室
+        const dept = day.randomDepartment()
+        if (!dept) break
+
+        // 选择医生（包含第三天和第六天的特殊规则）
+        const doctorName = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
+        if (!doctorName) break
+
+        // 从科室池中移除该科室
+        day.removeDepartment(dept)
+        // 从医生池中移除该医生
+        day.removeDoctor(doctorName)
+
+        // 设置医生
+        const doctor = doctors.find(d => d.name === doctorName)
+        if (doctor) {
+          doctor.schedule[day.dayOfWeek] = { morning: dept, afternoon: dept }
+          doctor.workDays++
+          doctor.consecutiveWorkDays++
+          console.log(`  ✅ ${dept} 分配给 ${doctorName}（全天）`)
+        }
+
+        console.log(`  📊 剩余科室池: [${day.departmentPool.join(', ')}]`)
+        console.log(`  📊 剩余医生池: [${day.doctorPool.join(', ')}]`)
+      }
+
       // Step 4: 剩余医生赋值"休息"
-      day.doctorPool.forEach(doctor => {
-        doctor.schedule[day.dayOfWeek] = { morning: '休息', afternoon: '休息' }
-        doctor.restDays++
-        doctor.consecutiveWorkDays = 0
-        console.log(`  ✅ ${doctor.name} 休息`)
+      day.doctorPool.forEach(doctorName => {
+        const doctor = doctors.find(d => d.name === doctorName)
+        if (doctor) {
+          doctor.schedule[day.dayOfWeek] = { morning: '休息', afternoon: '休息' }
+          doctor.restDays++
+          doctor.consecutiveWorkDays = 0
+          console.log(`  ✅ ${doctorName} 休息`)
+        }
       })
 
       console.log(`🔴 ===== ${day.date} (${day.dayOfWeek}) 排班完成 =====`)
@@ -610,16 +558,19 @@ export class ScheduleService {
    * 选择医生（包含第三天和第六天的特殊规则）
    */
   private selectDoctor(
-    doctorPool: Doctor[],
+    doctorPool: string[],
     dayName: string,
     dayIndex: number,
     allDoctors: Doctor[],
     dates: string[],
     dayNames: string[]
-  ): Doctor | null {
+  ): string | null {
     // 第三天（索引2）开始：优先排休息够了2天的医生
     if (dayIndex >= 2) {
-      const restedDoctors = doctorPool.filter(doctor => {
+      const restedDoctors = doctorPool.filter(doctorName => {
+        const doctor = allDoctors.find(d => d.name === doctorName)
+        if (!doctor) return false
+
         // 检查前两天是否都休息
         const day1 = dayNames[dayIndex - 2]
         const day2 = dayNames[dayIndex - 1]
@@ -627,19 +578,24 @@ export class ScheduleService {
       })
 
       if (restedDoctors.length > 0) {
-        console.log(`  🔍 优先选择休息够2天的医生: ${restedDoctors.map(d => d.name).join(', ')}`)
+        console.log(`  🔍 优先选择休息够2天的医生: ${restedDoctors.join(', ')}`)
         return restedDoctors[Math.floor(Math.random() * restedDoctors.length)]
       }
     }
 
     // 第六天（索引5）开始：检查连续工作5天
     if (dayIndex >= 5) {
-      const doctorsToRest = doctorPool.filter(doctor => doctor.consecutiveWorkDays >= 5)
+      const doctorsToRest = doctorPool.filter(doctorName => {
+        const doctor = allDoctors.find(d => d.name === doctorName)
+        if (!doctor) return false
+        return doctor.consecutiveWorkDays >= 5
+      })
+
       if (doctorsToRest.length > 0) {
-        console.log(`  🔍 连续工作5天的医生，优先休息: ${doctorsToRest.map(d => d.name).join(', ')}`)
+        console.log(`  🔍 连续工作5天的医生，优先休息: ${doctorsToRest.join(', ')}`)
         // 从医生池中移除这些医生
         doctorsToRest.forEach(d => {
-          const idx = doctorPool.findIndex(p => p.id === d.id)
+          const idx = doctorPool.indexOf(d)
           if (idx !== -1) {
             doctorPool.splice(idx, 1)
           }
@@ -689,16 +645,13 @@ export class ScheduleService {
     }
 
     if (Array.isArray(leaveDoctors) && leaveDoctors.length > 0) {
-      // 检查第一个元素类型
       const firstItem = leaveDoctors[0]
 
       if (typeof firstItem === 'string') {
-        // 简单的医生名称数组
         (leaveDoctors as string[]).forEach((doctor: string) => {
           leaveMap[doctor] = []
         })
       } else {
-        // 对象数组
         (leaveDoctors as { doctor: string; dates: string[] }[]).forEach((item) => {
           leaveMap[item.doctor] = item.dates
         })
