@@ -849,27 +849,33 @@ const IndexPage = () => {
                 </View>
 
                 {/* 表格内容 */}
-                {Object.values(scheduleData.doctorSchedule).map((info) => (
-                  <View key={info.name} className="flex flex-row">
-                    <View className="w-24 bg-gray-50 p-2 border border-gray-200">
-                      <Text className="block text-sm font-medium text-center">{info.name}</Text>
+                {Object.values(scheduleData.doctorSchedule).map((info) => {
+                  const morningShifts = ((info as any).morningShiftDays || info.morningShifts.length) * 2
+                  const afternoonShifts = ((info as any).afternoonShiftDays || info.afternoonShifts.length) * 2
+                  const restDays = 7 - (morningShifts + afternoonShifts) / 2
+                  
+                  return (
+                    <View key={info.name} className="flex flex-row">
+                      <View className="w-24 bg-gray-50 p-2 border border-gray-200">
+                        <Text className="block text-sm font-medium text-center">{info.name}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                        <Text className="block text-xs">{info.nightShifts}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                        <Text className="block text-xs">{morningShifts}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                        <Text className="block text-xs">{afternoonShifts}</Text>
+                      </View>
+                      <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
+                        <Text className={`block text-xs ${restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
+                          {restDays % 1 === 0 ? restDays : restDays.toFixed(1)}
+                        </Text>
+                      </View>
                     </View>
-                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{info.nightShifts}</Text>
-                    </View>
-                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{((info as any).morningShiftDays || info.morningShifts.length) * 2}</Text>
-                    </View>
-                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{((info as any).afternoonShiftDays || info.afternoonShifts.length) * 2}</Text>
-                    </View>
-                    <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
-                        {info.restDays}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+                  )
+                })}
               </View>
             </ScrollView>
           </View>

@@ -821,21 +821,10 @@ export class ScheduleService {
         }
       })
 
-      // 🔴 重新计算休息天数（从 Doctor 对象的 restDays 重新计算，避免重复累加）
-      doctorSchedule[doctor.name].restDays = 0
-      dates.forEach(date => {
-        const shifts = doctorSchedule[doctor.name].shifts[date]
-        const depts = doctorSchedule[doctor.name].departmentsByDate[date]
-        
-        // 检查是否是全天休息
-        const isFullDayRest = (shifts.morning === 'off' && shifts.afternoon === 'off') &&
-                             (depts.morning === '休息' || depts.morning === '请假') &&
-                             (depts.afternoon === '休息' || depts.afternoon === '请假')
-        
-        if (isFullDayRest) {
-          doctorSchedule[doctor.name].restDays += 1
-        }
-      })
+      // 🔴 重新计算休息天数（根据工作天数计算，支持半天班）
+      // 休息天数 = 7 - 上午班天数 - 下午班天数
+      doctorSchedule[doctor.name].restDays = 
+        7 - doctorSchedule[doctor.name].morningShiftDays - doctorSchedule[doctor.name].afternoonShiftDays
     })
 
     return {
