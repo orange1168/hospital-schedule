@@ -809,6 +809,33 @@ export class ScheduleService {
           doctorSchedule[doctor.name].nightShiftsByDate[date] = true
         }
       })
+
+      // 🔴 计算工作天数（根据半天班次）
+      dates.forEach(date => {
+        const shifts = doctorSchedule[doctor.name].shifts[date]
+        if (shifts.morning === 'work') {
+          doctorSchedule[doctor.name].morningShiftDays += 0.5
+        }
+        if (shifts.afternoon === 'work') {
+          doctorSchedule[doctor.name].afternoonShiftDays += 0.5
+        }
+      })
+
+      // 🔴 重新计算休息天数（从 Doctor 对象的 restDays 重新计算，避免重复累加）
+      doctorSchedule[doctor.name].restDays = 0
+      dates.forEach(date => {
+        const shifts = doctorSchedule[doctor.name].shifts[date]
+        const depts = doctorSchedule[doctor.name].departmentsByDate[date]
+        
+        // 检查是否是全天休息
+        const isFullDayRest = (shifts.morning === 'off' && shifts.afternoon === 'off') &&
+                             (depts.morning === '休息' || depts.morning === '请假') &&
+                             (depts.afternoon === '休息' || depts.afternoon === '请假')
+        
+        if (isFullDayRest) {
+          doctorSchedule[doctor.name].restDays += 1
+        }
+      })
     })
 
     return {
