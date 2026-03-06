@@ -956,19 +956,11 @@ const IndexPage = () => {
               </Text>
               <View className="flex flex-col gap-2">
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '请输入' ? 'bg-gray-50 border-gray-500' : 'border-gray-300'}`}
-                  onTap={() => handleDepartmentSelect('请输入')}
-                >
-                  <Text className={`block text-sm ${selectedDepartment === '请输入' ? 'text-gray-600 font-medium' : 'text-gray-600'}`}>
-                    请输入（不限制）
-                  </Text>
-                </View>
-                <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
                   onTap={() => handleDepartmentSelect('休息')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
-                    休息（算在每周一天的休息要求中）
+                    休息
                   </Text>
                 </View>
                 <View
@@ -976,7 +968,7 @@ const IndexPage = () => {
                   onTap={() => handleDepartmentSelect('请假')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '请假' ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
-                    请假（额外休息，不算在每周一天的休息要求中）
+                    请假
                   </Text>
                 </View>
                 {DEPARTMENTS.map((dept) => (
