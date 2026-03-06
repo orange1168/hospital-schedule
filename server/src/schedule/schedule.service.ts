@@ -416,6 +416,14 @@ export class ScheduleService {
         const doctor = doctors.find(d => d.name === doctorName)
         if (!doctor) return
 
+        // 🔴 检查是否是值班休息日（优先级最高）
+        if (doctor.requiredRestDate === day.date) {
+          console.log(`  ⚠️ 固定排班冲突：${doctorName} ${day.date} 是值班休息日，忽略固定排班，强制休息`)
+          doctor.schedule[day.dayOfWeek] = { morning: '休息', afternoon: '休息' }
+          doctor.restDays++
+          return
+        }
+
         const { morning, afternoon } = shift
 
         // 处理上午
