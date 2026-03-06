@@ -838,10 +838,10 @@ const IndexPage = () => {
                     <Text className="block text-xs font-bold text-center">夜班</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
-                    <Text className="block text-xs font-bold text-center">上午班(天)</Text>
+                    <Text className="block text-xs font-bold text-center">上午班(次)</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
-                    <Text className="block text-xs font-bold text-center">下午班(天)</Text>
+                    <Text className="block text-xs font-bold text-center">下午班(次)</Text>
                   </View>
                   <View className="w-20 bg-green-50 p-2 border border-gray-200">
                     <Text className="block text-xs font-bold text-center">休息天数</Text>
@@ -858,10 +858,10 @@ const IndexPage = () => {
                       <Text className="block text-xs">{info.nightShifts}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{(info as any).morningShiftDays || info.morningShifts.length}</Text>
+                      <Text className="block text-xs">{((info as any).morningShiftDays || info.morningShifts.length) * 2}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
-                      <Text className="block text-xs">{(info as any).afternoonShiftDays || info.afternoonShifts.length}</Text>
+                      <Text className="block text-xs">{((info as any).afternoonShiftDays || info.afternoonShifts.length) * 2}</Text>
                     </View>
                     <View className="w-20 p-2 border border-gray-200 flex items-center justify-center">
                       <Text className={`block text-xs ${info.restDays >= 2 ? 'text-green-600' : 'text-red-600'}`}>
