@@ -509,38 +509,47 @@ const IndexPage = () => {
         if (env === Taro.ENV_TYPE.WEAPP) {
           // 小程序端下载
           try {
-            // 使用微信小程序的文件系统管理器
-            const fs = Taro.getFileSystemManager()
-            const filePath = `${Taro.env.USER_DATA_PATH}/${fileName}`
-            
-            // 将 base64 写入文件
-            fs.writeFile({
-              filePath,
-              data: base64Data,
-              encoding: 'base64',
+            // 先提示用户如何保存
+            Taro.showModal({
+              title: '保存文档到手机',
+              content: '文档即将打开。请点击右上角"..."菜单，选择"用其他应用打开"或"保存到手机"，即可将文档保存到手机存储中',
+              showCancel: false,
+              confirmText: '知道了',
               success: () => {
-                console.log('文件写入成功:', filePath)
-                // 打开文档
-                Taro.openDocument({
+                // 用户点击确认后，打开文档
+                const fs = Taro.getFileSystemManager()
+                const filePath = `${Taro.env.USER_DATA_PATH}/${fileName}`
+                
+                // 将 base64 写入文件
+                fs.writeFile({
                   filePath,
-                  fileType: 'docx',
+                  data: base64Data,
+                  encoding: 'base64',
                   success: () => {
-                    console.log('文档打开成功')
+                    console.log('文件写入成功:', filePath)
+                    // 打开文档
+                    Taro.openDocument({
+                      filePath,
+                      fileType: 'docx',
+                      success: () => {
+                        console.log('文档打开成功')
+                      },
+                      fail: (error) => {
+                        console.error('文档打开失败:', error)
+                        Taro.showToast({
+                          title: '文档打开失败',
+                          icon: 'none'
+                        })
+                      }
+                    })
                   },
                   fail: (error) => {
-                    console.error('文档打开失败:', error)
+                    console.error('文件写入失败:', error)
                     Taro.showToast({
-                      title: '文档打开失败',
+                      title: '文件写入失败',
                       icon: 'none'
                     })
                   }
-                })
-              },
-              fail: (error) => {
-                console.error('文件写入失败:', error)
-                Taro.showToast({
-                  title: '文件写入失败',
-                  icon: 'none'
                 })
               }
             })
