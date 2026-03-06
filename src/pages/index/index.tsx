@@ -381,7 +381,7 @@ const IndexPage = () => {
     })
   }
 
-  // 自动填充排班
+  // 自动填充排班（优化版：添加重试机制）
   const handleAutoFillSchedule = async () => {
     if (!startDate) {
       Taro.showToast({
@@ -409,73 +409,93 @@ const IndexPage = () => {
 
     setLoading(true)
 
-    try {
-      console.log('开始自动填充排班，参数:', { startDate, dutyStartDoctor, scheduleData })
+    // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
+    const fixedSchedule: Record<string, Record<string, {
+      morning: string | '请输入' | '休息' | '请假'
+      afternoon: string | '请输入' | '休息' | '请假'
+    }>> = {}
 
-      // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
-      const fixedSchedule: Record<string, Record<string, {
-        morning: string | '请输入' | '休息' | '请假'
-        afternoon: string | '请输入' | '休息' | '请假'
-      }>> = {}
+    // 遍历医生排班表，提取每个医生每天的固定排班
+    Object.entries(scheduleData.doctorSchedule).forEach(([doctor, doctorInfo]) => {
+      const shifts = doctorInfo.shifts
+      const departmentsByDate = (doctorInfo as any).departmentsByDate
 
-      // 遍历医生排班表，提取每个医生每天的固定排班
-      Object.entries(scheduleData.doctorSchedule).forEach(([doctor, doctorInfo]) => {
-        const shifts = doctorInfo.shifts
-        const departmentsByDate = (doctorInfo as any).departmentsByDate
+      Object.keys(shifts).forEach(date => {
+        const shift = shifts[date]
+        const dept = departmentsByDate[date]
 
-        Object.keys(shifts).forEach(date => {
-          const shift = shifts[date]
-          const dept = departmentsByDate[date]
-
-          // 只保留有固定排班的日期（包括休息、请假）
-          if (shift && dept && (dept.morning !== '请输入' || dept.afternoon !== '请输入')) {
-            if (!fixedSchedule[date]) {
-              fixedSchedule[date] = {}
-            }
-
-            fixedSchedule[date][doctor] = {
-              morning: dept.morning === '请输入' ? '休息' : dept.morning,
-              afternoon: dept.afternoon === '请输入' ? '休息' : dept.afternoon
-            }
+        // 只保留有固定排班的日期（包括休息、请假）
+        if (shift && dept && (dept.morning !== '请输入' || dept.afternoon !== '请输入')) {
+          if (!fixedSchedule[date]) {
+            fixedSchedule[date] = {}
           }
-        })
-      })
 
-      console.log('固定排班数据:', fixedSchedule)
-
-      const res = await Network.request({
-        url: '/api/schedule/generate',
-        method: 'POST',
-        data: {
-          startDate,
-          startDutyDoctor: dutyStartDoctor, // 🔴 修改：使用新参数名
-          selectedDepartments, // 🔴 新增：传递科室选择
-          fixedSchedule
+          fixedSchedule[date][doctor] = {
+            morning: dept.morning === '请输入' ? '休息' : dept.morning,
+            afternoon: dept.afternoon === '请输入' ? '休息' : dept.afternoon
+          }
         }
       })
-      console.log('排班生成响应:', res.data)
+    })
 
-      if (res.data.code === 200) {
-        setScheduleData(res.data.data)
-        Taro.showToast({
-          title: '自动填充成功',
-          icon: 'success'
+    console.log('固定排班数据:', fixedSchedule)
+
+    // 🔴 优化：添加重试机制（Railway 服务器可能休眠）
+    const maxRetries = 3
+    const retryDelay = 2000 // 2 秒
+
+    for (let retry = 0; retry < maxRetries; retry++) {
+      try {
+        console.log(`尝试第 ${retry + 1} 次自动填充排班，参数:`, { startDate, dutyStartDoctor, selectedDepartments })
+
+        const res = await Network.request({
+          url: '/api/schedule/generate',
+          method: 'POST',
+          data: {
+            startDate,
+            startDutyDoctor: dutyStartDoctor,
+            selectedDepartments,
+            fixedSchedule
+          }
         })
-      } else {
-        Taro.showToast({
-          title: res.data.msg || '自动填充失败',
-          icon: 'none'
-        })
+        console.log('排班生成响应:', res.data)
+
+        if (res.data.code === 200) {
+          setScheduleData(res.data.data)
+          Taro.showToast({
+            title: '自动填充成功',
+            icon: 'success'
+          })
+          return
+        } else {
+          // 后端返回错误
+          Taro.showToast({
+            title: res.data.msg || '自动填充失败',
+            icon: 'none'
+          })
+          return
+        }
+      } catch (error: any) {
+        console.error(`第 ${retry + 1} 次请求失败:`, error)
+
+        // 如果是最后一次重试，直接报错
+        if (retry === maxRetries - 1) {
+          console.error('自动填充失败（已重试 3 次）:', error)
+          Taro.showToast({
+            title: error?.message || '网络错误，请稍后重试',
+            icon: 'none',
+            duration: 3000
+          })
+          return
+        }
+
+        // 否则等待后重试
+        console.log(`等待 ${retryDelay}ms 后重试...`)
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
       }
-    } catch (error) {
-      console.error('自动填充失败:', error)
-      Taro.showToast({
-        title: error?.message || '自动填充失败',
-        icon: 'none'
-      })
-    } finally {
-      setLoading(false)
     }
+
+    setLoading(false)
   }
 
   // 下载doc文档
