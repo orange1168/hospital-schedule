@@ -304,7 +304,9 @@ export class ScheduleService {
       doctors,
       days,
       dutySchedule,
-      leaveMap
+      leaveMap,
+      dates,
+      dayNames
     )
 
     // 转换为旧的数据结构（保持兼容）
@@ -498,7 +500,9 @@ export class ScheduleService {
     doctors: Doctor[],
     days: Day[],
     dutySchedule: Record<string, string>,
-    leaveMap: Record<string, string[]>
+    leaveMap: Record<string, string[]>,
+    dates: string[],
+    dayNames: string[]
   ): void {
     days.forEach((day, index) => {
       console.log(`\n🔴 ===== ${day.date} (${day.dayOfWeek}) 排班 =====`)
@@ -551,7 +555,7 @@ export class ScheduleService {
         // 科室全天空闲：选择一个医生，全天在该科室
         if (dept.isFullDayAvailable()) {
           if (day.doctorPool.length > 0) {
-            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors)
+            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
             if (doctor) {
               dept.assignFullDay(doctor.name)
               doctor.schedule[day.dayOfWeek] = { morning: dept.name, afternoon: dept.name }
@@ -564,7 +568,7 @@ export class ScheduleService {
         } else if (dept.isMorningAvailable()) {
           // 科室下午被占用：只选择上午医生
           if (day.doctorPool.length > 0) {
-            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors)
+            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
             if (doctor) {
               dept.assignMorning(doctor.name)
               doctor.schedule[day.dayOfWeek].morning = dept.name
@@ -577,7 +581,7 @@ export class ScheduleService {
         } else if (dept.isAfternoonAvailable()) {
           // 科室上午被占用：只选择下午医生
           if (day.doctorPool.length > 0) {
-            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors)
+            const doctor = this.selectDoctor(day.doctorPool, day.dayOfWeek, index, doctors, dates, dayNames)
             if (doctor) {
               dept.assignAfternoon(doctor.name)
               doctor.schedule[day.dayOfWeek].afternoon = dept.name
@@ -609,14 +613,16 @@ export class ScheduleService {
     doctorPool: Doctor[],
     dayName: string,
     dayIndex: number,
-    allDoctors: Doctor[]
+    allDoctors: Doctor[],
+    dates: string[],
+    dayNames: string[]
   ): Doctor | null {
     // 第三天（索引2）开始：优先排休息够了2天的医生
     if (dayIndex >= 2) {
       const restedDoctors = doctorPool.filter(doctor => {
         // 检查前两天是否都休息
-        const day1 = this.getDayName(this.getDateOffset(-2))
-        const day2 = this.getDayName(this.getDateOffset(-1))
+        const day1 = dayNames[dayIndex - 2]
+        const day2 = dayNames[dayIndex - 1]
         return doctor.isFullDayRest(day1) && doctor.isFullDayRest(day2)
       })
 
@@ -683,12 +689,17 @@ export class ScheduleService {
     }
 
     if (Array.isArray(leaveDoctors) && leaveDoctors.length > 0) {
-      if (typeof leaveDoctors[0] === 'string') {
-        leaveDoctors.forEach((doctor: string) => {
+      // 检查第一个元素类型
+      const firstItem = leaveDoctors[0]
+
+      if (typeof firstItem === 'string') {
+        // 简单的医生名称数组
+        (leaveDoctors as string[]).forEach((doctor: string) => {
           leaveMap[doctor] = []
         })
       } else {
-        leaveDoctors.forEach((item: { doctor: string; dates: string[] }) => {
+        // 对象数组
+        (leaveDoctors as { doctor: string; dates: string[] }[]).forEach((item) => {
           leaveMap[item.doctor] = item.dates
         })
       }
@@ -819,16 +830,6 @@ export class ScheduleService {
     }
 
     return dates
-  }
-
-  /**
-   * 获取日期偏移
-   */
-  private getDateOffset(offset: number): string {
-    const today = new Date()
-    const date = new Date(today)
-    date.setDate(today.getDate() + offset)
-    return this.formatDate(date)
   }
 
   /**
