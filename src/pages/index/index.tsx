@@ -533,6 +533,24 @@ const IndexPage = () => {
     }
   }
 
+  // 重置排班
+  const handleResetSchedule = () => {
+    Taro.showModal({
+      title: '确认重置',
+      content: '确定要重置所有排班数据吗？所有已设置的排班将被清空。',
+      success: (res) => {
+        if (res.confirm) {
+          // 重新初始化空排班
+          initializeEmptySchedule()
+          Taro.showToast({
+            title: '重置成功',
+            icon: 'success'
+          })
+        }
+      }
+    })
+  }
+
   // 选择值班起始医生
   const handleSelectDutyStartDoctor = () => {
     setShowDutyStartPicker(true)
@@ -895,12 +913,20 @@ const IndexPage = () => {
             >
               {loading ? '填充中...' : '自动填充'}
             </Button>
+          </View>
+          <View className="flex flex-row gap-2 mb-4">
             <Button
               className="flex-1 bg-green-500 text-white rounded-lg py-3"
               onTap={handleDownloadDoc}
               disabled={!scheduleData}
             >
               下载文档
+            </Button>
+            <Button
+              className="flex-1 bg-red-500 text-white rounded-lg py-3"
+              onTap={handleResetSchedule}
+            >
+              重置
             </Button>
           </View>
 
