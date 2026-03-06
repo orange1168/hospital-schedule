@@ -466,11 +466,15 @@ export class ScheduleService {
 
       // Step 1: 值班医生先选科室
       const dutyDoctorName = dutySchedule[day.date]
+      console.log(`  📊 Step 1 开始：值班医生 = ${dutyDoctorName}`)
       if (dutyDoctorName) {
         const dutyDoctor = doctors.find(d => d.name === dutyDoctorName)
         if (dutyDoctor) {
+          console.log(`  📊 值班医生对象: ${dutyDoctor.name}, id=${dutyDoctor.id}`)
+          console.log(`  📊 科室池大小: ${day.departmentPool.length}, 内容: [${day.departmentPool.join(', ')}]`)
           // 从科室池中随机选择一个科室
           const selectedDept = day.randomDepartment()
+          console.log(`  📊 随机选择的科室: ${selectedDept}`)
           if (selectedDept) {
             // 从科室池中移除该科室
             day.removeDepartment(selectedDept)
@@ -482,6 +486,7 @@ export class ScheduleService {
             console.log(`  📊 剩余科室池: [${day.departmentPool.join(', ')}]`)
           } else {
             console.log(`  ⚠️ 科室池为空，值班医生 ${dutyDoctorName} 无法分配科室`)
+            console.log(`  ⚠️ 值班医生 ${dutyDoctorName} 的 schedule 保持空字符串！`)
           }
         }
       }
@@ -552,6 +557,17 @@ export class ScheduleService {
 
       console.log(`🔴 ===== ${day.date} (${day.dayOfWeek}) 排班完成 =====`)
     })
+
+    // 打印所有医生的排班表
+    console.log('\n🔴 ===== 医生排班表 =====')
+    doctors.forEach(doctor => {
+      console.log(`  ${doctor.name}:`)
+      dayNames.forEach(dayName => {
+        const schedule = doctor.schedule[dayName]
+        console.log(`    ${dayName}: ${JSON.stringify(schedule)}`)
+      })
+    })
+    console.log('🔴 ===== 医生排班表结束 =====')
   }
 
   /**
