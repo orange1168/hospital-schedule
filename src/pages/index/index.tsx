@@ -1,4 +1,4 @@
-import { View, Text, Button, ScrollView, Picker, Input } from '@tarojs/components'
+import { View, Text, Button, ScrollView, Picker, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
@@ -640,6 +640,20 @@ const IndexPage = () => {
       }
     })
 
+    // 🔴 保存邓旦医生的数据
+    const dengDanData = {
+      name: '邓旦',
+      shifts: {},
+      departmentsByDate: {},
+      isDirector: true
+    }
+    if (scheduleData?.doctorSchedule['邓旦']) {
+      scheduleData.dates.forEach(date => {
+        dengDanData.shifts[date] = { ...scheduleData.doctorSchedule['邓旦'].shifts[date] }
+        dengDanData.departmentsByDate[date] = { ...scheduleData.doctorSchedule['邓旦'].departmentsByDate[date] }
+      })
+    }
+
     // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
     const fixedSchedule: Record<string, Record<string, {
       morning: string | '请输入' | '休息' | '请假'
@@ -713,7 +727,12 @@ const IndexPage = () => {
               }
             }
           })
+
+          // 🔴 恢复邓旦医生的数据
+          newScheduleData.doctorSchedule['邓旦'] = dengDanData
+
           setScheduleData(newScheduleData)
+          setLoading(false)
           Taro.showToast({
             title: '自动填充成功',
             icon: 'success'
@@ -721,6 +740,7 @@ const IndexPage = () => {
           return
         } else {
           // 后端返回错误
+          setLoading(false)
           Taro.showToast({
             title: res.data.msg || '自动填充失败',
             icon: 'none'
@@ -733,6 +753,7 @@ const IndexPage = () => {
         // 如果是最后一次重试，直接报错
         if (retry === maxRetries - 1) {
           console.error('自动填充失败（已重试 3 次）:', error)
+          setLoading(false)
           Taro.showToast({
             title: error?.message || '网络错误，请稍后重试',
             icon: 'none',
@@ -1018,14 +1039,16 @@ const IndexPage = () => {
                               </View>
                             )
                           } else if (doctor === '补休' || doctor === '其他') {
-                            // 补休和其他：输入框
+                            // 补休和其他：多行输入框
                             return (
-                              <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
-                                <Input
-                                  type="text"
-                                  className="w-full text-xs text-center bg-transparent border-none outline-none"
+                              <View key={date} className="w-24 p-2 border border-gray-200 min-h-[80px] flex items-center justify-center">
+                                <Textarea
+                                  className="w-full text-xs text-center bg-transparent border-none outline-none resize-none"
                                   placeholder="输入"
                                   value={departments.morning || ''}
+                                  maxlength={200}
+                                  autoHeight={false}
+                                  adjustPosition={false}
                                   onInput={(e: any) => {
                                     const newScheduleData = { ...scheduleData }
                                     newScheduleData.doctorSchedule[doctor].departmentsByDate[date] = {
