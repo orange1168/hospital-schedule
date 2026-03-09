@@ -4,16 +4,16 @@ import './DepartmentSelector.css'
 
 // 科室列表
 const DEPARTMENTS = [
-  '1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室',
-  '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'
+  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'
 ]
 
 const DEFAULT_DEPARTMENTS = [
-  '1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室',
-  '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'
+  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'
 ]
 
-const DEFAULT_WEEKEND_DEPARTMENTS = ['1诊室', '2诊室', '4诊室', '5诊室']
+const DEFAULT_WEEKEND_DEPARTMENTS = ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
 
 interface DepartmentSelectorProps {
   visible: boolean
