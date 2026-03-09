@@ -911,7 +911,7 @@ export class ScheduleService {
   }
 
   /**
-   * 导出排班表为Word文档
+   * 导出排班表为Word文档（只保留医生排班表）
    */
   async exportSchedule(scheduleData: ScheduleData): Promise<Buffer> {
     const { dates, datesWithWeek, departments, schedule, dutySchedule, doctorSchedule } = scheduleData
@@ -928,144 +928,148 @@ export class ScheduleService {
       })
     )
 
-    // 科室排班表
+    // 医生排班表
     children.push(
       new Paragraph({
-        text: '一、科室排班表',
+        text: '医生排班表',
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 400, after: 200 }
       })
     )
 
-    const departmentTableRows: TableRow[] = []
-    const departmentHeaderRow = new TableRow({
-      children: [
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] })] }),
-        ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] }))
-      ]
-    })
-    departmentTableRows.push(departmentHeaderRow)
-
-    departments.forEach(dept => {
-      const rowCells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: dept, bold: true })] })] })]
-
-      dates.forEach(date => {
-        const assignments = schedule[date]?.[dept] || []
-        const doctorNames = assignments.map(a => a.doctor).join('、')
-        rowCells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: doctorNames || '-' })] })] }))
-      })
-
-      departmentTableRows.push(new TableRow({ children: rowCells }))
-    })
-
-    children.push(new Table({
-      rows: departmentTableRows,
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 1 },
-        bottom: { style: BorderStyle.SINGLE, size: 1 },
-        left: { style: BorderStyle.SINGLE, size: 1 },
-        right: { style: BorderStyle.SINGLE, size: 1 },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1 }
-      }
-    }))
-
-    // 医生排班表
-    children.push(
-      new Paragraph({
-        text: '二、医生排班表',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 600, after: 200 }
-      })
-    )
-
     const doctorTableRows: TableRow[] = []
+
+    // 表头
     const doctorHeaderRow = new TableRow({
       children: [
         new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '医生', bold: true })] })] }),
         ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] })),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '值班次数', bold: true })] })] })
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '夜班', bold: true })] })] })
       ]
     })
     doctorTableRows.push(doctorHeaderRow)
 
+    // 遍历所有医生
     Object.values(doctorSchedule).forEach((doctor: any) => {
       const rowCells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: doctor.name, bold: true })] })] })]
 
       dates.forEach(date => {
         const shifts = doctor.shifts?.[date]
-        let shiftText = ''
-        if (!shifts) {
-          shiftText = '-'
-        } else if (shifts.morning === 'work' && shifts.afternoon === 'work') {
-          const dept = doctor.departmentsByDate?.[date]?.morning || '未知'
-          shiftText = dept
-        } else if (shifts.morning === 'work') {
-          const dept = doctor.departmentsByDate?.[date]?.morning || '未知'
-          shiftText = `上午:${dept}`
-        } else if (shifts.afternoon === 'work') {
-          const dept = doctor.departmentsByDate?.[date]?.afternoon || '未知'
-          shiftText = `下午:${dept}`
-        } else {
-          shiftText = '休息'
-        }
-
+        const depts = doctor.departmentsByDate?.[date]
         const isDuty = doctor.nightShiftsByDate?.[date]
-        if (isDuty && shiftText !== '休息') {
-          shiftText = `${shiftText}（值班）`
+        const isDirector = doctor.isDirector
+        const isSpecialRow = doctor.isSpecialRow
+
+        let shiftText = ''
+        let shiftColor = '000000' // 默认黑色
+
+        if (isDirector) {
+          // 邓旦医生（科室主任）：周一到周五显示"-"，周六周日显示"休息"
+          const dateObj = new Date(date)
+          const dayOfWeek = dateObj.getDay()
+          if (dayOfWeek === 0 || dayOfWeek === 6) {
+            // 周末
+            shiftText = '休息'
+            shiftColor = '808080' // 灰色
+          } else {
+            // 工作日
+            shiftText = '-'
+            shiftColor = 'D3D3D3' // 浅灰色
+          }
+        } else if (isSpecialRow) {
+          // 特殊行（一线夜、二线夜、三线夜、补休、其他）
+          if (doctor.name === '三线夜') {
+            // 三线夜：显示"邓旦"
+            shiftText = '邓旦'
+            shiftColor = '008000' // 绿色
+          } else if (doctor.name === '补休' || doctor.name === '其他') {
+            // 补休和其他：显示用户输入的内容
+            shiftText = depts?.morning || ''
+            shiftColor = '008000' // 绿色
+          } else {
+            // 一线夜和二线夜：显示选择的医生
+            shiftText = depts?.morning || '选择医生'
+            shiftColor = depts?.morning ? '008000' : 'D3D3D3' // 绿色或浅灰色
+          }
+        } else if (isDuty) {
+          // 值班医生
+          const dutyDepartment = depts?.morning || depts?.afternoon || ''
+          shiftText = dutyDepartment ? `${dutyDepartment}（值班）` : '值班'
+          shiftColor = 'FF0000' // 红色
+        } else if (!shifts) {
+          // 无排班数据
+          shiftText = '-'
+          shiftColor = 'D3D3D3' // 浅灰色
+        } else if (shifts.morning === 'off' && shifts.afternoon === 'off') {
+          // 全天休息
+          const morningDept = depts?.morning
+          const afternoonDept = depts?.afternoon
+
+          if (morningDept === '休息' && afternoonDept === '休息') {
+            shiftText = '休息'
+            shiftColor = '808080' // 灰色
+          } else if (morningDept === '请假' && afternoonDept === '请假') {
+            shiftText = '请假'
+            shiftColor = 'FFA500' // 橙色
+          } else if (morningDept === '请输入' && afternoonDept === '请输入') {
+            shiftText = '请输入'
+            shiftColor = 'D3D3D3' // 浅灰色
+          } else {
+            // 混合状态
+            shiftText = `${morningDept || '休息'}\n${afternoonDept || '休息'}`
+            shiftColor = 'FFA500' // 橙色
+          }
+        } else if (shifts.morning === 'work' && shifts.afternoon === 'work') {
+          // 全天上班
+          const morningDept = depts?.morning
+          const afternoonDept = depts?.afternoon
+
+          if (morningDept === afternoonDept) {
+            shiftText = morningDept || '未知'
+          } else {
+            shiftText = `${morningDept || '未知'}\n${afternoonDept || '未知'}`
+          }
+          shiftColor = '0000FF' // 蓝色
+        } else {
+          // 半天上班
+          if (shifts.morning === 'work') {
+            shiftText = `上午：${depts?.morning || '未知'}\n下午：休息`
+          } else {
+            shiftText = `上午：休息\n下午：${depts?.afternoon || '未知'}`
+          }
+          shiftColor = 'FFA500' // 橙色
         }
 
-        rowCells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: shiftText })] })] }))
+        // 检查是否包含5诊室
+        const has5Clinic = shiftText.includes('5诊室')
+        if (has5Clinic && !isDuty) {
+          shiftColor = 'FF0000' // 红色
+        }
+
+        rowCells.push(new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({
+              text: shiftText,
+              color: shiftColor
+            })]
+          })]
+        }))
       })
 
-      rowCells.push(new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(doctor.nightShifts || 0) })] })] }))
+      // 夜班次数
+      rowCells.push(new TableCell({
+        children: [new Paragraph({
+          children: [new TextRun({
+            text: String(doctor.nightShifts || 0)
+          })]
+        })]
+      }))
+
       doctorTableRows.push(new TableRow({ children: rowCells }))
     })
 
     children.push(new Table({
       rows: doctorTableRows,
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 1 },
-        bottom: { style: BorderStyle.SINGLE, size: 1 },
-        left: { style: BorderStyle.SINGLE, size: 1 },
-        right: { style: BorderStyle.SINGLE, size: 1 },
-        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
-        insideVertical: { style: BorderStyle.SINGLE, size: 1 }
-      }
-    }))
-
-    // 值班表
-    children.push(
-      new Paragraph({
-        text: '三、值班表',
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 600, after: 200 }
-      })
-    )
-
-    const dutyTableRows: TableRow[] = []
-    const dutyHeaderRow = new TableRow({
-      children: [
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '日期', bold: true })] })] }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '值班医生', bold: true })] })] })
-      ]
-    })
-    dutyTableRows.push(dutyHeaderRow)
-
-    dates.forEach((date, index) => {
-      const dutyDoctor = dutySchedule[date] || '-'
-      dutyTableRows.push(new TableRow({
-        children: [
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: datesWithWeek[index] })] })] }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: dutyDoctor, bold: true })] })] })
-        ]
-      }))
-    })
-
-    children.push(new Table({
-      rows: dutyTableRows,
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
         top: { style: BorderStyle.SINGLE, size: 1 },
