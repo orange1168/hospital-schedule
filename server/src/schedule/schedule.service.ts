@@ -196,18 +196,33 @@ export class ScheduleService {
     dutyDoctors: string[],
     selectedDepartments: SelectedDepartments,
     fixedSchedule?: FixedSchedule,
-    leaveDoctors?: string[] | { doctor: string; dates: string[] }[]
+    leaveDoctors?: string[] | { doctor: string; dates: string[] }[],
+    endDate?: string // 🔴 新增：结束日期（可选，默认7天）
   ): Promise<ScheduleData> {
     console.log('🔴 ===== 开始生成排班表 =====')
     console.log('🔴 起始日期:', startDate)
+    console.log('🔴 结束日期:', endDate || '未提供（默认7天）')
     console.log('🔴 值班医生列表:', dutyDoctors)
     console.log('🔴 选中的科室:', selectedDepartments)
 
     // === 第一阶段：获取页面数据 ===
     console.log('\n🔴 ===== 第一阶段：获取页面数据 =====')
 
-    // 获取日期列表（7天）
-    const dates = this.getDates(startDate, 7)
+    // 🔴 修改：根据endDate计算天数，支持动态天数（最多14天）
+    let scheduleDays = 7 // 默认7天
+    if (endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      const diffTime = end.getTime() - start.getTime()
+      scheduleDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      // 限制最大14天
+      scheduleDays = Math.min(scheduleDays, 14)
+    }
+
+    console.log('🔴 排班天数:', scheduleDays)
+
+    // 获取日期列表
+    const dates = this.getDates(startDate, scheduleDays)
     const dayNames = dates.map(date => this.getDayName(date))
     const datesWithWeek = dates.map(date => `${date} ${this.getDayOfWeek(date)}`)
 
@@ -215,7 +230,7 @@ export class ScheduleService {
     console.log('🔴 星期列表:', dayNames)
 
     // 验证输入数据
-    this.validateInput(dutyDoctors, selectedDepartments)
+    this.validateInput(dutyDoctors, selectedDepartments, scheduleDays)
 
     // 处理请假数据
     const leaveMap = this.processLeaveDoctors(leaveDoctors)
@@ -641,10 +656,21 @@ export class ScheduleService {
    */
   private validateInput(
     dutyDoctors: string[],
-    selectedDepartments: SelectedDepartments
+    selectedDepartments: SelectedDepartments,
+    scheduleDays: number // 🔴 新增：排班天数
   ): void {
     if (!dutyDoctors || dutyDoctors.length === 0) {
       throw new BadRequestException('请至少选择一位值班医生')
+    }
+
+    // 🔴 新增：验证值班医生数量是否足够
+    if (dutyDoctors.length < scheduleDays) {
+      throw new BadRequestException(`排班${scheduleDays}天需要至少${scheduleDays}位值班医生，当前选择了${dutyDoctors.length}位`)
+    }
+
+    // 🔴 新增：验证值班医生数量至少7位
+    if (dutyDoctors.length < 7) {
+      throw new BadRequestException('请至少选择7位值班医生')
     }
 
     // 验证值班医生是否都在固定医生列表中

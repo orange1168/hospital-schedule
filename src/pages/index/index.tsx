@@ -52,6 +52,7 @@ const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
 
   const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('') // 🔴 新增：结束日期
   const [selectedDutyDoctors, setSelectedDutyDoctors] = useState<string[]>([]) // 用户选择的值班医生列表
   const [loading, setLoading] = useState(false)
 
@@ -85,18 +86,31 @@ const IndexPage = () => {
     return nextMonday.toISOString().split('T')[0]
   }
 
+  // 🔴 修改：获取给定日期所在周的周日
+  const getSundayOfWeek = (dateStr: string): string => {
+    const date = new Date(dateStr)
+    const dayOfWeek = date.getDay() // 0=周日, 1=周一, ..., 6=周六
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : (7 - dayOfWeek)
+    const sunday = new Date(date)
+    sunday.setDate(date.getDate() + daysUntilSunday)
+    return sunday.toISOString().split('T')[0]
+  }
+
   // 初始化默认值
   useEffect(() => {
-    setStartDate(getNextMonday())
+    const nextMonday = getNextMonday()
+    const sundayOfWeek = getSundayOfWeek(nextMonday)
+    setStartDate(nextMonday)
+    setEndDate(sundayOfWeek)
   }, [])
 
-  // 当 startDate 改变时，初始化空排班数据结构
+  // 当 startDate 或 endDate 改变时，初始化空排班数据结构
   useEffect(() => {
-    if (startDate) {
+    if (startDate && endDate) {
       initializeEmptySchedule()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate])
+  }, [startDate, endDate])
 
   // 排班修改相关状态
   const [showCellEditModal, setShowCellEditModal] = useState(false)
@@ -109,12 +123,21 @@ const IndexPage = () => {
   // 🔴 夜班医生列表（二线夜可选医生）
   const NIGHT_DOCTORS = ['罗丹', '李茜', '高玲']
 
-  // 获取日期列表
+  // 获取日期列表（🔴 修改：支持动态天数）
   const getDates = (): string[] => {
-    if (!startDate) return []
+    if (!startDate || !endDate) return []
     const dates: string[] = []
     const start = new Date(startDate)
-    for (let i = 0; i < 7; i++) {
+    const end = new Date(endDate)
+
+    // 计算天数差
+    const diffTime = end.getTime() - start.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+
+    // 🔴 限制最大14天
+    const maxDays = Math.min(diffDays, 14)
+
+    for (let i = 0; i < maxDays; i++) {
       const date = new Date(start)
       date.setDate(start.getDate() + i)
       dates.push(date.toISOString().split('T')[0])
@@ -626,17 +649,30 @@ const IndexPage = () => {
 
   // 自动填充排班（优化版：添加重试机制）
   const handleAutoFillSchedule = async () => {
-    if (!startDate) {
+    if (!startDate || !endDate) {
       Taro.showToast({
-        title: '请选择开始日期',
+        title: '请选择开始和结束日期',
         icon: 'none'
       })
       return
     }
 
+    // 🔴 修改：验证排班天数是否超过值班医生数量
+    const dates = getDates()
+    const scheduleDays = dates.length
+    const dutyDoctorsCount = selectedDutyDoctors.length
+
     if (selectedDutyDoctors.length < 7) {
       Taro.showToast({
         title: '请选择至少7位值班医生',
+        icon: 'none'
+      })
+      return
+    }
+
+    if (scheduleDays > dutyDoctorsCount) {
+      Taro.showToast({
+        title: `排班${scheduleDays}天需要至少${scheduleDays}位值班医生`,
         icon: 'none'
       })
       return
@@ -726,14 +762,15 @@ const IndexPage = () => {
 
     for (let retry = 0; retry < maxRetries; retry++) {
       try {
-        console.log(`尝试第 ${retry + 1} 次自动填充排班，参数:`, { startDate, selectedDutyDoctors, selectedDepartments })
+        console.log(`尝试第 ${retry + 1} 次自动填充排班，参数:`, { startDate, endDate, selectedDutyDoctors, selectedDepartments })
 
         const res = await Network.request({
           url: '/api/schedule/generate',
           method: 'POST',
           data: {
             startDate,
-            dutyDoctors: selectedDutyDoctors, // 🔴 修改：传递值班医生列表
+            endDate, // 🔴 新增：传递结束日期
+            dutyDoctors: selectedDutyDoctors,
             selectedDepartments,
             fixedSchedule
           }
@@ -951,12 +988,57 @@ const IndexPage = () => {
                 mode="date"
                 value={startDate}
                 onChange={(e) => {
-                  setStartDate(e.detail.value)
-                  // 日期改变时重新初始化空排班
-                  setTimeout(() => initializeEmptySchedule(), 100)
+                  const newStartDate = e.detail.value
+                  setStartDate(newStartDate)
+                  // 🔴 修改：自动计算该周的周日作为结束日期
+                  const newEndDate = getSundayOfWeek(newStartDate)
+                  setEndDate(newEndDate)
+                  // 🔴 修改：立即重新初始化空排班，移除setTimeout
+                  initializeEmptySchedule()
                 }}
               >
                 <Text className="block text-sm">{startDate || '请选择日期'}</Text>
+              </Picker>
+            </View>
+          </View>
+
+          {/* 🔴 结束日期选择 */}
+          <View className="flex flex-row items-center gap-2">
+            <Text className="block text-sm font-medium w-24">结束日期：</Text>
+            <View className="flex-1 bg-gray-50 rounded-lg px-3 py-2">
+              <Picker
+                mode="date"
+                value={endDate}
+                onChange={(e) => {
+                  const newEndDate = e.detail.value
+                  // 验证日期范围
+                  if (startDate) {
+                    const start = new Date(startDate)
+                    const end = new Date(newEndDate)
+                    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+                    if (diffDays < 1) {
+                      Taro.showToast({
+                        title: '结束日期不能早于开始日期',
+                        icon: 'none'
+                      })
+                      return
+                    }
+
+                    if (diffDays > 14) {
+                      Taro.showToast({
+                        title: '最多只能排14天班',
+                        icon: 'none'
+                      })
+                      return
+                    }
+                  }
+                  setEndDate(newEndDate)
+                  // 🔴 修改：立即重新初始化空排班，移除setTimeout
+                  initializeEmptySchedule()
+                }}
+              >
+                <Text className="block text-sm">{endDate || '请选择日期'}</Text>
               </Picker>
             </View>
           </View>
@@ -965,7 +1047,7 @@ const IndexPage = () => {
           <View className="flex flex-col gap-2 mt-2">
             <Text className="block text-sm font-medium text-gray-700">排班医生：</Text>
             <View className="bg-gray-50 rounded-lg p-3">
-              <Text className="block text-xs text-gray-600 mb-2">点击选择值班医生（按选择的顺序值班）：</Text>
+              <Text className="block text-xs text-gray-600 mb-2">点击选择值班医生（按选择的顺序值班，至少7位）：</Text>
               <View className="flex flex-row flex-wrap gap-2">
                 {FIXED_DOCTORS.filter(doctor => doctor !== '邓旦').map((doctor) => (
                   <View
@@ -980,14 +1062,7 @@ const IndexPage = () => {
                         // 取消选择
                         setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
                       } else {
-                        // 检查是否超过7位
-                        if (selectedDutyDoctors.length >= 7) {
-                          Taro.showToast({
-                            title: '值班医生最多选择7位',
-                            icon: 'none'
-                          })
-                          return
-                        }
+                        // 🔴 修改：不再限制最大数量，允许超过7位
                         // 添加到值班医生列表
                         setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
                       }
