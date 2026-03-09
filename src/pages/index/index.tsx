@@ -225,6 +225,163 @@ const IndexPage = () => {
     })
   }
 
+  // 更新值班医生排班和一线夜
+  const updateDutySchedule = () => {
+    if (!scheduleData || !scheduleData.dates) {
+      return
+    }
+
+    const newScheduleData = JSON.parse(JSON.stringify(scheduleData))
+    const dates = scheduleData.dates
+
+    // 清除所有医生的值班标记和排班信息
+    Object.values(newScheduleData.doctorSchedule).forEach((doctorInfo: any) => {
+      if (!doctorInfo.isDirector && !doctorInfo.isSpecialRow) {
+        if (doctorInfo.nightShiftsByDate) {
+          Object.keys(doctorInfo.nightShiftsByDate).forEach((date: string) => {
+            delete doctorInfo.nightShiftsByDate[date]
+          })
+        }
+        doctorInfo.nightShiftsByDate = {}
+        doctorInfo.nightShifts = 0
+
+        dates.forEach((date: string) => {
+          const dept = doctorInfo.departmentsByDate[date]
+          if (dept?.morning === '1诊室' || dept?.afternoon === '1诊室') {
+            newScheduleData.schedule[date]['1诊室'] = newScheduleData.schedule[date]['1诊室'].filter(
+              (slot: any) => slot.doctor !== doctorInfo.name
+            )
+            if (dept?.morning === '1诊室') {
+              dept.morning = '请输入'
+              if (doctorInfo.shifts[date]) {
+                doctorInfo.shifts[date].morning = 'off'
+              }
+              if ((doctorInfo as any).morningShiftDays && (doctorInfo as any).morningShiftDays > 0) {
+                (doctorInfo as any).morningShiftDays -= 0.5
+                doctorInfo.restDays = (doctorInfo.restDays || 0) + 0.5
+              }
+            }
+            if (dept?.afternoon === '1诊室') {
+              dept.afternoon = '请输入'
+              if (doctorInfo.shifts[date]) {
+                doctorInfo.shifts[date].afternoon = 'off'
+              }
+              if ((doctorInfo as any).afternoonShiftDays && (doctorInfo as any).afternoonShiftDays > 0) {
+                (doctorInfo as any).afternoonShiftDays -= 0.5
+                doctorInfo.restDays = (doctorInfo.restDays || 0) + 0.5
+              }
+            }
+          }
+        })
+
+        dates.forEach((date: string) => {
+          if (newScheduleData.dutySchedule[date] === doctorInfo.name) {
+            newScheduleData.dutySchedule[date] = ''
+          }
+        })
+      }
+    })
+
+    // 清除一线夜的填充
+    const firstNightShiftInfo = newScheduleData.doctorSchedule['一线夜']
+    if (firstNightShiftInfo) {
+      dates.forEach((date: string) => {
+        firstNightShiftInfo.departmentsByDate[date] = {
+          morning: '',
+          afternoon: ''
+        }
+      })
+    }
+
+    // 自动填充值班医生到医生排班表（1诊室值班）
+    selectedDutyDoctors.forEach((doctor, index) => {
+      if (index < 7) {
+        const date = dates[index]
+        const doctorInfo = newScheduleData.doctorSchedule[doctor]
+
+        if (doctorInfo && !doctorInfo.isDirector && !doctorInfo.isSpecialRow) {
+          if (!doctorInfo.shifts[date]) {
+            doctorInfo.shifts[date] = { morning: 'off', afternoon: 'off' }
+          }
+          doctorInfo.shifts[date] = {
+            morning: 'work',
+            afternoon: 'work'
+          }
+          doctorInfo.departmentsByDate[date] = {
+            morning: '1诊室',
+            afternoon: '1诊室'
+          }
+          if (!doctorInfo.nightShiftsByDate) {
+            doctorInfo.nightShiftsByDate = {}
+          }
+          doctorInfo.nightShiftsByDate[date] = true
+          doctorInfo.nightShifts = (doctorInfo.nightShifts || 0) + 1
+
+          const existingMorningSlot = newScheduleData.schedule[date]['1诊室'].find(
+            (slot: any) => slot.doctor === doctor && slot.shift === 'morning'
+          )
+          const existingAfternoonSlot = newScheduleData.schedule[date]['1诊室'].find(
+            (slot: any) => slot.doctor === doctor && slot.shift === 'afternoon'
+          )
+          if (!existingMorningSlot) {
+            newScheduleData.schedule[date]['1诊室'].push({
+              doctor,
+              shift: 'morning',
+              department: '1诊室'
+            })
+          }
+          if (!existingAfternoonSlot) {
+            newScheduleData.schedule[date]['1诊室'].push({
+              doctor,
+              shift: 'afternoon',
+              department: '1诊室'
+            })
+          }
+
+          newScheduleData.dutySchedule[date] = doctor
+
+          if (!(doctorInfo as any).morningShiftDays) {
+            (doctorInfo as any).morningShiftDays = 0
+          }
+          if (!(doctorInfo as any).afternoonShiftDays) {
+            (doctorInfo as any).afternoonShiftDays = 0
+          }
+          const daysToAdd = 0.5
+          if (typeof (doctorInfo as any).morningShiftDays === 'number') {
+            (doctorInfo as any).morningShiftDays = (doctorInfo as any).morningShiftDays + daysToAdd
+          }
+          if (typeof (doctorInfo as any).afternoonShiftDays === 'number') {
+            (doctorInfo as any).afternoonShiftDays = (doctorInfo as any).afternoonShiftDays + daysToAdd
+          }
+          if (typeof doctorInfo.restDays === 'number') {
+            doctorInfo.restDays = Math.max(0, doctorInfo.restDays - 1)
+          }
+        }
+      }
+    })
+
+    // 自动填充一线夜
+    if (firstNightShiftInfo) {
+      selectedDutyDoctors.forEach((doctor, index) => {
+        if (index < 7) {
+          const date = dates[index]
+          firstNightShiftInfo.departmentsByDate[date] = {
+            morning: doctor,
+            afternoon: ''
+          }
+        }
+      })
+    }
+
+    setScheduleData(newScheduleData)
+  }
+
+  // 监听值班医生选择变化
+  useEffect(() => {
+    updateDutySchedule()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDutyDoctors])
+
   // 处理单元格点击（医生排班表）
   const handleDoctorCellClick = (doctor: string, date: string) => {
     const schedule = scheduleData?.doctorSchedule[doctor]
@@ -732,6 +889,14 @@ const IndexPage = () => {
                         // 取消选择
                         setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
                       } else {
+                        // 检查是否超过7位
+                        if (selectedDutyDoctors.length >= 7) {
+                          Taro.showToast({
+                            title: '值班医生最多选择7位',
+                            icon: 'none'
+                          })
+                          return
+                        }
                         // 添加到值班医生列表
                         setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
                       }
