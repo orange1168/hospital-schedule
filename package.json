@@ -8,7 +8,7 @@
     "build:server": "pnpm --filter server build",
     "build:weapp": "taro build --type weapp",
     "build:web": "taro build --type h5",
-    "dev": "pnpm exec concurrently -n web,server -c blue,green \"pnpm dev:web\" \"pnpm dev:server\"",
+    "dev": "pnpm exec concurrently -n web,server -c blue,green \"pnpm dev:web\" \"PORT=3000 pnpm dev:server\"",
     "dev:server": "pnpm --filter server dev",
     "dev:weapp": "taro build --type weapp --watch",
     "dev:web": "taro build --type h5 --watch",
