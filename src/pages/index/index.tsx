@@ -441,9 +441,9 @@ const IndexPage = () => {
       return
     }
 
-    if (selectedDutyDoctors.length === 0) {
+    if (selectedDutyDoctors.length < 7) {
       Taro.showToast({
-        title: '请选择值班医生',
+        title: '请选择至少7位值班医生',
         icon: 'none'
       })
       return
@@ -786,7 +786,7 @@ const IndexPage = () => {
                         style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: isDirector ? '#fefce8' : isSpecialRow ? '#f0fdf4' : '#f9fafb' }}
                       >
                         <Text className={`block text-sm font-medium text-center ${isDirector ? 'text-yellow-700' : isSpecialRow ? 'text-green-700' : ''}`}>
-                          {doctor}
+                          {doctor}{selectedDutyDoctors.includes(doctor) && !isDirector && !isSpecialRow ? ' ⭐' : ''}
                         </Text>
                       </View>
                       {scheduleData.dates.map((date) => {
@@ -1039,7 +1039,10 @@ const IndexPage = () => {
                 </View>
 
                 {/* 表格内容 */}
-                {Object.values(scheduleData.doctorSchedule).map((info) => {
+                {FIXED_DOCTORS.filter(d => d !== '邓旦').map((doctorName) => {
+                  const info = scheduleData.doctorSchedule[doctorName]
+                  if (!info) return null
+
                   const morningShifts = ((info as any).morningShiftDays || info.morningShifts.length) * 2
                   const afternoonShifts = ((info as any).afternoonShiftDays || info.afternoonShifts.length) * 2
                   const restDays = 7 - (morningShifts + afternoonShifts) / 2
