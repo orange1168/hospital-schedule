@@ -17,16 +17,9 @@ export namespace Network {
     }
 
     export const request: typeof Taro.request = option => {
-        const finalUrl = createUrl(option.url)
-        console.log('🔴 Network.request:', {
-            originalUrl: option.url,
-            finalUrl,
-            method: option.method,
-            data: option.data
-        })
         return Taro.request({
             ...option,
-            url: finalUrl,
+            url: createUrl(option.url),
         })
     }
 

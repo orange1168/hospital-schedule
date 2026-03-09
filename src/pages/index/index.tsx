@@ -5,9 +5,6 @@ import Taro from '@tarojs/taro'
 import DepartmentSelector from '@/components/DepartmentSelector'
 import './index.css'
 
-// 🔴 调试：打印 PROJECT_DOMAIN
-console.log('🔴 PROJECT_DOMAIN (runtime):', typeof PROJECT_DOMAIN !== 'undefined' ? PROJECT_DOMAIN : 'undefined')
-
 interface ScheduleData {
   dates: string[]
   datesWithWeek: string[]
