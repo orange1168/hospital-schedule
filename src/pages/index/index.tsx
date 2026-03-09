@@ -60,13 +60,13 @@ const IndexPage = () => {
     Saturday: string[]
     Sunday: string[]
   }>({
-    Monday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Tuesday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Wednesday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Thursday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Friday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Saturday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室'],
-    Sunday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室']
+    Monday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Tuesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）'],
+    Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
   })
 
   // 获取下周一
@@ -673,53 +673,7 @@ const IndexPage = () => {
         console.log('排班生成响应:', res.data)
 
         if (res.data.code === 200) {
-          // 🔴 保留特殊行和邓旦的数据（后端不返回这些数据）
-          const backendData = res.data.data
-          const currentSpecialRows = ['一线夜', '二线夜', '三线夜', '补休', '其他']
-          const preservedData: any = {}
-
-          // 保留邓旦医生的数据
-          if (scheduleData.doctorSchedule['邓旦']) {
-            preservedData['邓旦'] = scheduleData.doctorSchedule['邓旦']
-          }
-
-          // 保留特殊行的数据
-          currentSpecialRows.forEach(rowName => {
-            if (scheduleData.doctorSchedule[rowName]) {
-              preservedData[rowName] = scheduleData.doctorSchedule[rowName]
-            }
-          })
-
-          // 合并数据
-          const mergedDoctorSchedule = {
-            ...backendData.doctorSchedule,
-            ...preservedData
-          }
-
-          // 🔴 添加1诊室到科室列表和排班数据
-          const updatedDepartments = ['1诊室', ...backendData.departments]
-          const updatedSchedule = { ...backendData.schedule }
-
-          // 为每一天添加1诊室的排班数据（值班医生）
-          backendData.dates.forEach((date: string) => {
-            const dutyDoctor = backendData.dutySchedule[date]
-            if (dutyDoctor) {
-              updatedSchedule[date] = {
-                '1诊室': [
-                  { doctor: dutyDoctor, shift: 'morning', department: '1诊室' },
-                  { doctor: dutyDoctor, shift: 'afternoon', department: '1诊室' }
-                ],
-                ...(updatedSchedule[date] || {})
-              }
-            }
-          })
-
-          setScheduleData({
-            ...backendData,
-            departments: updatedDepartments,
-            schedule: updatedSchedule,
-            doctorSchedule: mergedDoctorSchedule
-          })
+          setScheduleData(res.data.data)
           Taro.showToast({
             title: '自动填充成功',
             icon: 'success'
