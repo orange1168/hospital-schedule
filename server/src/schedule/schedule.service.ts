@@ -943,8 +943,7 @@ export class ScheduleService {
     const doctorHeaderRow = new TableRow({
       children: [
         new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '医生', bold: true })] })] }),
-        ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] })),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '夜班', bold: true })] })] })
+        ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] }))
       ]
     })
     doctorTableRows.push(doctorHeaderRow)
@@ -1055,15 +1054,6 @@ export class ScheduleService {
           })]
         }))
       })
-
-      // 夜班次数
-      rowCells.push(new TableCell({
-        children: [new Paragraph({
-          children: [new TextRun({
-            text: String(doctor.nightShifts || 0)
-          })]
-        })]
-      }))
 
       doctorTableRows.push(new TableRow({ children: rowCells }))
     })
