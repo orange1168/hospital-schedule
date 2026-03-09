@@ -875,10 +875,10 @@ export class ScheduleService {
         }
       })
 
-      // 🔴 重新计算休息天数（根据工作天数计算，支持半天班）
-      // 休息天数 = 7 - 上午班天数 - 下午班天数
-      doctorSchedule[doctor.name].restDays = 
-        7 - doctorSchedule[doctor.name].morningShiftDays - doctorSchedule[doctor.name].afternoonShiftDays
+      // 🔴 修复：重新计算休息天数（根据工作天数计算，支持半天班）
+      // 休息天数 = 排班天数 - (上午班天数 + 下午班天数) / 2
+      doctorSchedule[doctor.name].restDays =
+        dates.length - (doctorSchedule[doctor.name].morningShiftDays + doctorSchedule[doctor.name].afternoonShiftDays) / 2
     })
 
     // 🔴 添加特殊行（一线夜、二线夜、三线夜、补休、其他）

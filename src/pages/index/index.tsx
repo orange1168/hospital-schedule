@@ -1048,7 +1048,21 @@ const IndexPage = () => {
                         // 取消选择
                         setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
                       } else {
-                        // 🔴 修改：不再限制最大数量，允许超过7位
+                        // 🔴 修改：添加验证，值班医生数量不能超过排班天数
+                        if (startDate && endDate) {
+                          const start = new Date(startDate)
+                          const end = new Date(endDate)
+                          const scheduleDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+                          if (selectedDutyDoctors.length >= scheduleDays) {
+                            Taro.showToast({
+                              title: `只能选择${scheduleDays}位值班医生（排班${scheduleDays}天）`,
+                              icon: 'none'
+                            })
+                            return
+                          }
+                        }
+
                         // 添加到值班医生列表
                         setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
                       }
@@ -1360,9 +1374,11 @@ const IndexPage = () => {
                   const info = scheduleData.doctorSchedule[doctorName]
                   if (!info) return null
 
+                  // 🔴 修复：使用动态排班天数计算休息天数
+                  const scheduleDays = scheduleData.dates.length
                   const morningShifts = ((info as any).morningShiftDays || info.morningShifts.length) * 2
                   const afternoonShifts = ((info as any).afternoonShiftDays || info.afternoonShifts.length) * 2
-                  const restDays = 7 - (morningShifts + afternoonShifts) / 2
+                  const restDays = scheduleDays - (morningShifts + afternoonShifts) / 2
                   
                   return (
                     <View key={info.name} className="flex flex-row">
