@@ -1,5 +1,5 @@
 {
-  "buildCommand": "bash scripts/vercel-build.sh",
+  "buildCommand": "cd . && bash scripts/vercel-build.sh",
   "outputDirectory": "dist-web",
-  "installCommand": "pnpm install"
+  "installCommand": "pnpm install --no-frozen-lockfile"
 }
