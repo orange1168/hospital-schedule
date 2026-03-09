@@ -100,9 +100,14 @@ const IndexPage = () => {
 
   // 排班修改相关状态
   const [showCellEditModal, setShowCellEditModal] = useState(false)
-  const [editingCell, setEditingCell] = useState<{ type: 'department' | 'doctor' | 'department_select_doctor'; key1: string; key2: string; key3?: string } | null>(null)
+  const [showDoctorSelector, setShowDoctorSelector] = useState(false)
+  const [editingCell, setEditingCell] = useState<{ type: 'department' | 'doctor' | 'night_doctor'; key1: string; key2: string; key3?: string } | null>(null)
   const [selectedDepartment, setSelectedDepartment] = useState('')
+  const [selectedDoctor, setSelectedDoctor] = useState('')
   const [selectedShiftType, setSelectedShiftType] = useState<'full' | 'morning' | 'afternoon'>('full')
+
+  // 🔴 夜班医生列表（二线夜可选医生）
+  const NIGHT_DOCTORS = ['罗丹', '李茜', '高玲']
 
   // 获取日期列表
   const getDates = (): string[] => {
@@ -594,6 +599,31 @@ const IndexPage = () => {
     })
   }
 
+  // 🔴 处理夜班医生选择（用于一线夜和二线夜）
+  const handleNightDoctorSelect = (doctorName: string) => {
+    if (!editingCell || !scheduleData) return
+
+    const newScheduleData = { ...scheduleData }
+    const rowName = editingCell.key1 // '一线夜' 或 '二线夜'
+    const date = editingCell.key2
+
+    // 更新特殊行的数据
+    newScheduleData.doctorSchedule[rowName].departmentsByDate[date] = {
+      morning: doctorName,
+      afternoon: ''
+    }
+
+    setScheduleData(newScheduleData)
+    setShowDoctorSelector(false)
+    setEditingCell(null)
+    setSelectedDoctor('')
+
+    Taro.showToast({
+      title: '修改成功',
+      icon: 'success'
+    })
+  }
+
   // 自动填充排班（优化版：添加重试机制）
   const handleAutoFillSchedule = async () => {
     if (!startDate) {
@@ -1068,10 +1098,10 @@ const IndexPage = () => {
                                 className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center cursor-pointer active:bg-green-50"
                                 onTap={() => {
                                   // 打开医生选择弹窗
-                                  setEditingCell({ type: 'doctor', key1: doctor, key2: date })
-                                  const dept = departments.morning || ''
-                                  setSelectedDepartment(dept)
-                                  setShowCellEditModal(true)
+                                  setEditingCell({ type: 'night_doctor', key1: doctor, key2: date })
+                                  const selectedDoc = departments.morning || ''
+                                  setSelectedDoctor(selectedDoc)
+                                  setShowDoctorSelector(true)
                                 }}
                               >
                                 <Text className={`text-xs text-center whitespace-pre-line ${departments.morning ? 'text-green-600' : 'text-gray-300'}`}>
@@ -1425,6 +1455,55 @@ const IndexPage = () => {
                   setEditingCell(null)
                   setSelectedDepartment('')
                   setSelectedShiftType('full')
+                }}
+              >
+                <Text className="block text-sm font-medium">取消</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 🔴 夜班医生选择弹窗（用于一线夜和二线夜） */}
+      {showDoctorSelector && editingCell && editingCell.type === 'night_doctor' && (
+        <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <View className="bg-white rounded-lg p-6 mx-4 w-80">
+            <Text className="block text-lg font-bold mb-4 text-center">
+              选择夜班医生
+            </Text>
+            
+            <View className="flex flex-col gap-2 mb-4">
+              <Text className="block text-sm text-gray-600 mb-2">
+                请选择{editingCell.key1 === '一线夜' ? '一线夜' : '二线夜'}医生：
+              </Text>
+              {NIGHT_DOCTORS.map((doctor) => (
+                <View
+                  key={doctor}
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDoctor === doctor ? 'bg-green-50 border-green-500' : 'border-gray-300'}`}
+                  onTap={() => handleNightDoctorSelect(doctor)}
+                >
+                  <Text className={`block text-sm ${selectedDoctor === doctor ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
+                    {doctor}
+                  </Text>
+                </View>
+              ))}
+              <View
+                className={`w-full p-3 border rounded-lg text-center ${selectedDoctor === '' ? 'bg-gray-50 border-gray-400' : 'border-gray-300'}`}
+                onTap={() => handleNightDoctorSelect('')}
+              >
+                <Text className={`block text-sm ${selectedDoctor === '' ? 'text-gray-600' : 'text-gray-400'}`}>
+                  清空选择
+                </Text>
+              </View>
+            </View>
+            
+            <View className="flex gap-3">
+              <View
+                className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
+                onTap={() => {
+                  setShowDoctorSelector(false)
+                  setEditingCell(null)
+                  setSelectedDoctor('')
                 }}
               >
                 <Text className="block text-sm font-medium">取消</Text>
