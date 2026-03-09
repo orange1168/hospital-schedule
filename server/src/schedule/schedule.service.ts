@@ -691,9 +691,12 @@ export class ScheduleService {
       throw new BadRequestException('请至少选择一位值班医生')
     }
 
-    // 🔴 修改：移除值班医生数量必须≥排班天数的限制
-    // 改为验证值班医生数量至少7位（值班医生第二天必须休息）
-    // 实际值班逻辑会在 generateDutySchedule 中处理循环分配
+    // 🔴 修改：验证值班医生数量不能超过排班天数
+    if (dutyDoctors.length > scheduleDays) {
+      throw new BadRequestException(`值班医生数量不能超过排班天数（${scheduleDays}天），当前选择了${dutyDoctors.length}位`)
+    }
+
+    // 🔴 修改：验证值班医生数量至少7位
     if (dutyDoctors.length < 7) {
       throw new BadRequestException('请至少选择7位值班医生')
     }

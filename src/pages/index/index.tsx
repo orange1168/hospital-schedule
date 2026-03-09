@@ -327,82 +327,80 @@ const IndexPage = () => {
       })
     }
 
-    // 自动填充值班医生到医生排班表（1诊室值班）
+    // 🔴 修改：自动填充值班医生到医生排班表（1诊室值班，支持循环分配）
     selectedDutyDoctors.forEach((doctor, index) => {
-      if (index < 7) {
-        const date = dates[index]
-        const doctorInfo = newScheduleData.doctorSchedule[doctor]
+      // 使用取模运算实现循环分配
+      const date = dates[index % dates.length]
+      const doctorInfo = newScheduleData.doctorSchedule[doctor]
 
-        if (doctorInfo && !doctorInfo.isDirector && !doctorInfo.isSpecialRow) {
-          if (!doctorInfo.shifts[date]) {
-            doctorInfo.shifts[date] = { morning: 'off', afternoon: 'off' }
-          }
-          doctorInfo.shifts[date] = {
-            morning: 'work',
-            afternoon: 'work'
-          }
-          doctorInfo.departmentsByDate[date] = {
-            morning: '1诊室',
-            afternoon: '1诊室'
-          }
-          if (!doctorInfo.nightShiftsByDate) {
-            doctorInfo.nightShiftsByDate = {}
-          }
-          doctorInfo.nightShiftsByDate[date] = true
-          doctorInfo.nightShifts = (doctorInfo.nightShifts || 0) + 1
+      if (doctorInfo && !doctorInfo.isDirector && !doctorInfo.isSpecialRow) {
+        if (!doctorInfo.shifts[date]) {
+          doctorInfo.shifts[date] = { morning: 'off', afternoon: 'off' }
+        }
+        doctorInfo.shifts[date] = {
+          morning: 'work',
+          afternoon: 'work'
+        }
+        doctorInfo.departmentsByDate[date] = {
+          morning: '1诊室',
+          afternoon: '1诊室'
+        }
+        if (!doctorInfo.nightShiftsByDate) {
+          doctorInfo.nightShiftsByDate = {}
+        }
+        doctorInfo.nightShiftsByDate[date] = true
+        doctorInfo.nightShifts = (doctorInfo.nightShifts || 0) + 1
 
-          const existingMorningSlot = newScheduleData.schedule[date]['1诊室'].find(
-            (slot: any) => slot.doctor === doctor && slot.shift === 'morning'
-          )
-          const existingAfternoonSlot = newScheduleData.schedule[date]['1诊室'].find(
-            (slot: any) => slot.doctor === doctor && slot.shift === 'afternoon'
-          )
-          if (!existingMorningSlot) {
-            newScheduleData.schedule[date]['1诊室'].push({
-              doctor,
-              shift: 'morning',
-              department: '1诊室'
-            })
-          }
-          if (!existingAfternoonSlot) {
-            newScheduleData.schedule[date]['1诊室'].push({
-              doctor,
-              shift: 'afternoon',
-              department: '1诊室'
-            })
-          }
+        const existingMorningSlot = newScheduleData.schedule[date]['1诊室'].find(
+          (slot: any) => slot.doctor === doctor && slot.shift === 'morning'
+        )
+        const existingAfternoonSlot = newScheduleData.schedule[date]['1诊室'].find(
+          (slot: any) => slot.doctor === doctor && slot.shift === 'afternoon'
+        )
+        if (!existingMorningSlot) {
+          newScheduleData.schedule[date]['1诊室'].push({
+            doctor,
+            shift: 'morning',
+            department: '1诊室'
+          })
+        }
+        if (!existingAfternoonSlot) {
+          newScheduleData.schedule[date]['1诊室'].push({
+            doctor,
+            shift: 'afternoon',
+            department: '1诊室'
+          })
+        }
 
-          newScheduleData.dutySchedule[date] = doctor
+        newScheduleData.dutySchedule[date] = doctor
 
-          if (!(doctorInfo as any).morningShiftDays) {
-            (doctorInfo as any).morningShiftDays = 0
-          }
-          if (!(doctorInfo as any).afternoonShiftDays) {
-            (doctorInfo as any).afternoonShiftDays = 0
-          }
-          const daysToAdd = 0.5
-          if (typeof (doctorInfo as any).morningShiftDays === 'number') {
-            (doctorInfo as any).morningShiftDays = (doctorInfo as any).morningShiftDays + daysToAdd
-          }
-          if (typeof (doctorInfo as any).afternoonShiftDays === 'number') {
-            (doctorInfo as any).afternoonShiftDays = (doctorInfo as any).afternoonShiftDays + daysToAdd
-          }
-          if (typeof doctorInfo.restDays === 'number') {
-            doctorInfo.restDays = Math.max(0, doctorInfo.restDays - 1)
-          }
+        if (!(doctorInfo as any).morningShiftDays) {
+          (doctorInfo as any).morningShiftDays = 0
+        }
+        if (!(doctorInfo as any).afternoonShiftDays) {
+          (doctorInfo as any).afternoonShiftDays = 0
+        }
+        const daysToAdd = 0.5
+        if (typeof (doctorInfo as any).morningShiftDays === 'number') {
+          (doctorInfo as any).morningShiftDays = (doctorInfo as any).morningShiftDays + daysToAdd
+        }
+        if (typeof (doctorInfo as any).afternoonShiftDays === 'number') {
+          (doctorInfo as any).afternoonShiftDays = (doctorInfo as any).afternoonShiftDays + daysToAdd
+        }
+        if (typeof doctorInfo.restDays === 'number') {
+          doctorInfo.restDays = Math.max(0, doctorInfo.restDays - 1)
         }
       }
     })
 
-    // 自动填充一线夜
+    // 🔴 修改：自动填充一线夜（支持循环分配）
     if (firstNightShiftInfo) {
       selectedDutyDoctors.forEach((doctor, index) => {
-        if (index < 7) {
-          const date = dates[index]
-          firstNightShiftInfo.departmentsByDate[date] = {
-            morning: doctor,
-            afternoon: ''
-          }
+        // 使用取模运算实现循环分配
+        const date = dates[index % dates.length]
+        firstNightShiftInfo.departmentsByDate[date] = {
+          morning: doctor,
+          afternoon: ''
         }
       })
     }
