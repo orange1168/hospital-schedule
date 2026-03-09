@@ -2,17 +2,19 @@ import { View, Text, ScrollView, Button } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import './DepartmentSelector.css'
 
-// 科室列表
+// 完整的科室列表
 const DEPARTMENTS = [
-  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室',
-  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'
+  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
 ]
 
+// 工作日默认科室（不包括9诊室，男1，男3，女1）
 const DEFAULT_DEPARTMENTS = [
   '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室',
   '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'
 ]
 
+// 周末默认科室（前四个）
 const DEFAULT_WEEKEND_DEPARTMENTS = ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
 
 interface DepartmentSelectorProps {
