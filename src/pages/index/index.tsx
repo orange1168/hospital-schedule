@@ -1,4 +1,4 @@
-import { View, Text, Button, ScrollView, Picker } from '@tarojs/components'
+import { View, Text, Button, ScrollView, Picker, Input } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import { Network } from '@/network'
 import Taro from '@tarojs/taro'
@@ -42,6 +42,12 @@ const DEPARTMENTS = [
   '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
 ]
 
+// 🔴 医生排班表选择的科室列表（不包括1诊室，因为1诊室是值班科室）
+const DOCTOR_DEPARTMENTS = [
+  '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
+]
+
 const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
 
@@ -60,13 +66,13 @@ const IndexPage = () => {
     Saturday: string[]
     Sunday: string[]
   }>({
-    Monday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Tuesday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Wednesday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Thursday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Friday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Saturday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室'],
-    Sunday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室']
+    Monday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Tuesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）'],
+    Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
   })
 
   // 获取下周一
@@ -1015,22 +1021,20 @@ const IndexPage = () => {
                             // 补休和其他：输入框
                             return (
                               <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
-                                <View className="w-full bg-white rounded px-1 py-1">
-                                  <input
-                                    type="text"
-                                    className="w-full text-xs text-center bg-transparent outline-none"
-                                    placeholder="输入"
-                                    value={departments.morning || ''}
-                                    onChange={(e: any) => {
-                                      const newScheduleData = { ...scheduleData }
-                                      newScheduleData.doctorSchedule[doctor].departmentsByDate[date] = {
-                                        morning: e.detail.value,
-                                        afternoon: ''
-                                      }
-                                      setScheduleData(newScheduleData)
-                                    }}
-                                  />
-                                </View>
+                                <Input
+                                  type="text"
+                                  className="w-full text-xs text-center bg-transparent border-none outline-none"
+                                  placeholder="输入"
+                                  value={departments.morning || ''}
+                                  onInput={(e: any) => {
+                                    const newScheduleData = { ...scheduleData }
+                                    newScheduleData.doctorSchedule[doctor].departmentsByDate[date] = {
+                                      morning: e.detail.value,
+                                      afternoon: ''
+                                    }
+                                    setScheduleData(newScheduleData)
+                                  }}
+                                />
                               </View>
                             )
                           } else {
@@ -1075,7 +1079,7 @@ const IndexPage = () => {
                             
                             if (morningDept === '休息' && afternoonDept === '休息') {
                               shiftText = '休息'
-                              shiftColor = 'text-blue-600'
+                              shiftColor = 'text-gray-500'
                             } else if (morningDept === '请假' && afternoonDept === '请假') {
                               shiftText = '请假'
                               shiftColor = 'text-orange-600'
@@ -1377,7 +1381,7 @@ const IndexPage = () => {
                     请假
                   </Text>
                 </View>
-                {DEPARTMENTS.map((dept) => (
+                {DOCTOR_DEPARTMENTS.map((dept) => (
                   <View
                     key={dept}
                     className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
