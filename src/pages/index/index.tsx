@@ -657,22 +657,10 @@ const IndexPage = () => {
       return
     }
 
-    // 🔴 修改：验证排班天数是否超过值班医生数量
-    const dates = getDates()
-    const scheduleDays = dates.length
-    const dutyDoctorsCount = selectedDutyDoctors.length
-
+    // 🔴 修改：验证值班医生至少7位（值班医生第二天必须休息，可以循环分配）
     if (selectedDutyDoctors.length < 7) {
       Taro.showToast({
         title: '请选择至少7位值班医生',
-        icon: 'none'
-      })
-      return
-    }
-
-    if (scheduleDays > dutyDoctorsCount) {
-      Taro.showToast({
-        title: `排班${scheduleDays}天需要至少${scheduleDays}位值班医生`,
         icon: 'none'
       })
       return

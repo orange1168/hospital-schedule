@@ -316,48 +316,75 @@ export class ScheduleService {
   ): Record<string, string> {
     const dutySchedule: Record<string, string> = {}
 
-    // 记录每个医生不能值班的剩余天数（确保至少休息1天）
+    // 🔴 修改：记录每个医生不能值班的剩余天数（确保至少休息1天）
     const doctorDutyBlockDays: Record<string, number> = {}
+
+    // 初始化所有医生的禁止值班天数为0
+    doctors.forEach(doctor => {
+      doctorDutyBlockDays[doctor.name] = 0
+    })
 
     dates.forEach((date, index) => {
       const dayName = dayNames[index]
 
-      // 从用户选择的值班医生列表中循环选择
-      const dutyDoctor = dutyDoctors[index % dutyDoctors.length]
-      const doctor = doctors.find(d => d.name === dutyDoctor)
+      // 🔴 修改：递减所有医生的禁止值班天数
+      Object.keys(doctorDutyBlockDays).forEach(doctorName => {
+        if (doctorDutyBlockDays[doctorName] > 0) {
+          doctorDutyBlockDays[doctorName]--
+        }
+      })
 
-      if (!doctor) {
-        console.error(`🔴 错误：找不到医生 ${dutyDoctor}`)
-        dutySchedule[date] = '未知医生'
+      // 🔴 修改：从用户选择的值班医生列表中循环选择，但要跳过不能值班的医生
+      let dutyDoctorName: string | null = null
+      let dutyDoctor: Doctor | null = null
+
+      // 尝试找到一个可以值班的医生
+      for (let attempt = 0; attempt < dutyDoctors.length; attempt++) {
+        const candidateDoctorName = dutyDoctors[(index + attempt) % dutyDoctors.length]
+        const candidateDoctor = doctors.find(d => d.name === candidateDoctorName)
+
+        if (!candidateDoctor) {
+          console.error(`🔴 错误：找不到医生 ${candidateDoctorName}`)
+          continue
+        }
+
+        // 检查是否可以值班
+        const canDuty = this.checkCanDuty(
+          candidateDoctor,
+          date,
+          dayName,
+          leaveMap,
+          fixedSchedule,
+          doctorDutyBlockDays
+        )
+
+        if (canDuty) {
+          dutyDoctorName = candidateDoctorName
+          dutyDoctor = candidateDoctor
+          break
+        }
+      }
+
+      if (!dutyDoctor || !dutyDoctorName) {
+        console.error(`🔴 错误：无法为 ${date} (${dayName}) 找到合适的值班医生`)
+        dutySchedule[date] = '无法值班'
         return
       }
 
-      // 检查是否可以值班
-      const canDuty = this.checkCanDuty(
-        doctor,
-        date,
-        dayName,
-        leaveMap,
-        fixedSchedule,
-        doctorDutyBlockDays
-      )
+      dutySchedule[date] = dutyDoctor.name
+      dutyDoctor.isDutyDoctor = true
+      dutyDoctor.dutyDate = date
 
-      if (canDuty) {
-        dutySchedule[date] = doctor.name
-        doctor.isDutyDoctor = true
-        doctor.dutyDate = date
-        if (index + 1 < dates.length) {
-          doctor.requiredRestDate = dates[index + 1]
-        }
+      // 🔴 修改：设置该医生不能值班的剩余天数为1（第二天必须休息）
+      doctorDutyBlockDays[dutyDoctor.name] = 1
 
-        // 设置该医生不能值班的剩余天数为1
-        doctorDutyBlockDays[doctor.name] = 1
-
-        console.log(`🔴 ${date} (${dayName}) 值班医生: ${doctor.name}`)
-      } else {
-        console.error(`🔴 错误：医生 ${doctor.name} 无法在 ${date} (${dayName}) 值班`)
-        dutySchedule[date] = '无法值班'
+      // 🔴 修改：设置值班休息日（用于后续处理固定排班）
+      if (index + 1 < dates.length) {
+        dutyDoctor.requiredRestDate = dates[index + 1]
+        console.log(`  🔴 设置 ${dutyDoctor.name} 的值班休息日为 ${dates[index + 1]}`)
       }
+
+      console.log(`🔴 ${date} (${dayName}) 值班医生: ${dutyDoctor.name}`)
     })
 
     return dutySchedule
@@ -508,12 +535,13 @@ export class ScheduleService {
         if (leaveMap[doctor.name] && (leaveMap[doctor.name].length === 0 || leaveMap[doctor.name].includes(day.date))) {
           return false
         }
-        // 移除值班医生（已分配科室）
-        if (doctor.dutyDate === day.date) {
+        // 🔴 修改：移除值班休息日的医生（优先级最高）
+        if (doctor.requiredRestDate === day.date) {
+          console.log(`  🔴 ${doctor.name} 今天是值班休息日，移出医生池`)
           return false
         }
-        // 移除值班休息日的医生
-        if (doctor.requiredRestDate === day.date) {
+        // 移除值班医生（已分配科室）
+        if (doctor.dutyDate === day.date) {
           return false
         }
         // 移除已有固定排班的医生
@@ -663,12 +691,9 @@ export class ScheduleService {
       throw new BadRequestException('请至少选择一位值班医生')
     }
 
-    // 🔴 新增：验证值班医生数量是否足够
-    if (dutyDoctors.length < scheduleDays) {
-      throw new BadRequestException(`排班${scheduleDays}天需要至少${scheduleDays}位值班医生，当前选择了${dutyDoctors.length}位`)
-    }
-
-    // 🔴 新增：验证值班医生数量至少7位
+    // 🔴 修改：移除值班医生数量必须≥排班天数的限制
+    // 改为验证值班医生数量至少7位（值班医生第二天必须休息）
+    // 实际值班逻辑会在 generateDutySchedule 中处理循环分配
     if (dutyDoctors.length < 7) {
       throw new BadRequestException('请至少选择7位值班医生')
     }
