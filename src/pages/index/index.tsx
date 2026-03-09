@@ -38,8 +38,8 @@ const FIXED_DOCTORS = [
 
 // 科室列表
 const DEPARTMENTS = [
-  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
-  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
+  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'
 ]
 
 const IndexPage = () => {
@@ -60,11 +60,11 @@ const IndexPage = () => {
     Saturday: string[]
     Sunday: string[]
   }>({
-    Monday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
-    Tuesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
-    Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
-    Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
-    Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
+    Monday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Tuesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
     Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）'],
     Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
   })
@@ -876,7 +876,7 @@ const IndexPage = () => {
                             
                             if (morningDept === '休息' && afternoonDept === '休息') {
                               shiftText = '休息'
-                              shiftColor = 'text-gray-400'
+                              shiftColor = 'text-blue-600'
                             } else if (morningDept === '请假' && afternoonDept === '请假') {
                               shiftText = '请假'
                               shiftColor = 'text-orange-600'
@@ -905,6 +905,15 @@ const IndexPage = () => {
                           }
                         }
 
+                        // 5诊室标红（值班医生已标红，不再重复标红）
+                        if (!hasNightShift) {
+                          const morningDept = departments.morning
+                          const afternoonDept = departments.afternoon
+                          if (morningDept?.includes('5诊室') || afternoonDept?.includes('5诊室')) {
+                            shiftColor = 'text-red-600'
+                          }
+                        }
+
                         return (
                           <View
                             key={date}
@@ -925,8 +934,8 @@ const IndexPage = () => {
           </View>
 
           {/* 科室排班表（只展示） */}
-          <Text className="block text-lg font-bold mb-3 mt-6">科室排班表</Text>
-          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
+          <Text className="block text-lg font-bold mb-3 mt-6 hidden">科室排班表</Text>
+          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm hidden">
             <Text className="block text-sm text-gray-500 mb-2">根据医生排班自动生成，不可编辑</Text>
             <ScrollView scrollX className="w-full overflow-x-auto">
               <View className="min-w-max">
@@ -999,24 +1008,6 @@ const IndexPage = () => {
                         </View>
                       )
                     })}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-
-          {/* 值班表 */}
-          <Text className="block text-lg font-bold mb-3 mt-6">夜间值班表</Text>
-          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
-            <Text className="block text-sm text-gray-500 mb-2">由系统自动生成</Text>
-            <ScrollView scrollX className="w-full overflow-x-auto">
-              <View className="min-w-max">
-                {scheduleData.dates.map((date, index) => (
-                  <View key={date} className="flex flex-row items-center border-b border-gray-100 py-2">
-                    <Text className="block w-32 text-sm font-medium">{scheduleData.datesWithWeek[index]}</Text>
-                    <Text className="block flex-1 text-sm text-blue-600 font-semibold">
-                      {scheduleData.dutySchedule[date] || '待自动填充'}
-                    </Text>
                   </View>
                 ))}
               </View>
