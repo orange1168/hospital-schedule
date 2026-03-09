@@ -3,7 +3,7 @@ import { ScheduleService, FixedSchedule, SelectedDepartments } from './schedule.
 
 interface GenerateScheduleDto {
   startDate: string
-  startDutyDoctor: string // 起始值班医生
+  dutyDoctors: string[] // 值班医生列表
   selectedDepartments: SelectedDepartments // 每天选择的科室
   fixedSchedule?: FixedSchedule // 固定排班数据
   leaveDoctors?: string[] | { doctor: string; dates: string[] }[] // 请假医生
@@ -24,7 +24,7 @@ export class ScheduleController {
   @Post('generate')
   async generateSchedule(@Body() body: GenerateScheduleDto) {
     console.log('收到排班生成请求（新版本）:', body)
-    const { startDate, startDutyDoctor, selectedDepartments, fixedSchedule, leaveDoctors } = body
+    const { startDate, dutyDoctors, selectedDepartments, fixedSchedule, leaveDoctors } = body
 
     if (!startDate) {
       return {
@@ -34,10 +34,10 @@ export class ScheduleController {
       }
     }
 
-    if (!startDutyDoctor) {
+    if (!dutyDoctors || dutyDoctors.length === 0) {
       return {
         code: 400,
-        msg: '请提供起始值班医生',
+        msg: '请选择值班医生',
         data: null
       }
     }
@@ -53,7 +53,7 @@ export class ScheduleController {
     try {
       const scheduleData = await this.scheduleService.generateSchedule(
         startDate,
-        startDutyDoctor,
+        dutyDoctors,
         selectedDepartments,
         fixedSchedule,
         leaveDoctors

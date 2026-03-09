@@ -32,22 +32,21 @@ interface ScheduleData {
 
 // 固定的医生列表
 const FIXED_DOCTORS = [
-  '李茜', '姜维', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎', '杨波',
-  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
+  '杨波', '李丹', '黄丹', '李茜', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎',
+  '周晓宇', '彭粤如', '万佳乐', '姜维', '罗丹', '杨飞娇', '蓝觅', '李卓', '蔡忠凤', '邓旦'
 ]
 
 // 科室列表
 const DEPARTMENTS = [
-  '1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室',
-  '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'
+  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
 ]
 
 const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
 
   const [startDate, setStartDate] = useState('')
-  const [dutyStartDoctor, setDutyStartDoctor] = useState<string>('')
-  const [showDutyStartPicker, setShowDutyStartPicker] = useState(false)
+  const [selectedDutyDoctors, setSelectedDutyDoctors] = useState<string[]>([]) // 用户选择的值班医生列表
   const [loading, setLoading] = useState(false)
 
   // 科室选择相关状态
@@ -61,13 +60,13 @@ const IndexPage = () => {
     Saturday: string[]
     Sunday: string[]
   }>({
-    Monday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
-    Tuesday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
-    Wednesday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
-    Thursday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
-    Friday: ['1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室', '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'],
-    Saturday: ['1诊室', '2诊室', '4诊室', '5诊室'],
-    Sunday: ['1诊室', '2诊室', '4诊室', '5诊室']
+    Monday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
+    Tuesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
+    Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
+    Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
+    Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'],
+    Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）'],
+    Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
   })
 
   // 获取下周一
@@ -83,7 +82,6 @@ const IndexPage = () => {
   // 初始化默认值
   useEffect(() => {
     setStartDate(getNextMonday())
-    setDutyStartDoctor('李茜')
   }, [])
 
   // 当 startDate 改变时，初始化空排班数据结构
@@ -139,9 +137,12 @@ const IndexPage = () => {
 
     const dutySchedule: Record<string, string> = {}
 
+    // 排除邓旦医生的列表（用于排班）
+    const doctorsForSchedule = FIXED_DOCTORS.filter(doctor => doctor !== '邓旦')
+
     // 初始化医生排班记录
     const doctorSchedule: Record<string, any> = {}
-    FIXED_DOCTORS.forEach(doctor => {
+    doctorsForSchedule.forEach(doctor => {
       doctorSchedule[doctor] = {
         name: doctor,
         shifts: {},
@@ -160,6 +161,55 @@ const IndexPage = () => {
         doctorSchedule[doctor].departmentsByDate[date] = {
           morning: '请输入',
           afternoon: '请输入'
+        }
+      })
+    })
+
+    // 添加邓旦医生（不排班，只显示）
+    doctorSchedule['邓旦'] = {
+      name: '邓旦',
+      shifts: {},
+      nightShiftsByDate: {},
+      departmentsByDate: {},
+      morningShifts: [],
+      afternoonShifts: [],
+      nightShifts: 0,
+      restDays: 0,
+      isDirector: true // 标记为科室主任
+    }
+    dates.forEach(date => {
+      doctorSchedule['邓旦'].shifts[date] = {
+        morning: 'off',
+        afternoon: 'off'
+      }
+      doctorSchedule['邓旦'].departmentsByDate[date] = {
+        morning: '',
+        afternoon: ''
+      }
+    })
+
+    // 添加特殊行（一线夜、二线夜、三线夜、补休、其他）
+    const specialRows = ['一线夜', '二线夜', '三线夜', '补休', '其他']
+    specialRows.forEach(rowName => {
+      doctorSchedule[rowName] = {
+        name: rowName,
+        shifts: {},
+        nightShiftsByDate: {},
+        departmentsByDate: {},
+        morningShifts: [],
+        afternoonShifts: [],
+        nightShifts: 0,
+        restDays: 0,
+        isSpecialRow: true // 标记为特殊行
+      }
+      dates.forEach(date => {
+        doctorSchedule[rowName].shifts[date] = {
+          morning: 'off',
+          afternoon: 'off'
+        }
+        doctorSchedule[rowName].departmentsByDate[date] = {
+          morning: rowName === '三线夜' ? '邓旦' : '',
+          afternoon: ''
         }
       })
     })
@@ -391,9 +441,9 @@ const IndexPage = () => {
       return
     }
 
-    if (!dutyStartDoctor) {
+    if (selectedDutyDoctors.length === 0) {
       Taro.showToast({
-        title: '请选择值班起始医生',
+        title: '请选择值班医生',
         icon: 'none'
       })
       return
@@ -415,8 +465,13 @@ const IndexPage = () => {
       afternoon: string | '请输入' | '休息' | '请假'
     }>> = {}
 
-    // 遍历医生排班表，提取每个医生每天的固定排班
+    // 遍历医生排班表，提取每个医生每天的固定排班（排除特殊行和邓旦）
     Object.entries(scheduleData.doctorSchedule).forEach(([doctor, doctorInfo]) => {
+      // 跳过特殊行和邓旦医生
+      if ((doctorInfo as any).isSpecialRow || (doctorInfo as any).isDirector) {
+        return
+      }
+
       const shifts = doctorInfo.shifts
       const departmentsByDate = (doctorInfo as any).departmentsByDate
 
@@ -446,14 +501,14 @@ const IndexPage = () => {
 
     for (let retry = 0; retry < maxRetries; retry++) {
       try {
-        console.log(`尝试第 ${retry + 1} 次自动填充排班，参数:`, { startDate, dutyStartDoctor, selectedDepartments })
+        console.log(`尝试第 ${retry + 1} 次自动填充排班，参数:`, { startDate, selectedDutyDoctors, selectedDepartments })
 
         const res = await Network.request({
           url: '/api/schedule/generate',
           method: 'POST',
           data: {
             startDate,
-            startDutyDoctor: dutyStartDoctor,
+            dutyDoctors: selectedDutyDoctors, // 🔴 修改：传递值班医生列表
             selectedDepartments,
             fixedSchedule
           }
@@ -634,19 +689,6 @@ const IndexPage = () => {
   }
 
   // 选择值班起始医生
-  const handleSelectDutyStartDoctor = () => {
-    setShowDutyStartPicker(true)
-  }
-
-  // 选择值班起始医生的确认
-  const handleConfirmDutyStartDoctor = (e) => {
-    const index = e.detail.value
-    if (index !== undefined && index >= 0) {
-      setDutyStartDoctor(FIXED_DOCTORS[index])
-    }
-    setShowDutyStartPicker(false)
-  }
-
   return (
     <ScrollView scrollY className="h-screen bg-gray-50">
       <View className="bg-white p-4 mb-4 shadow-sm">
@@ -671,56 +713,40 @@ const IndexPage = () => {
             </View>
           </View>
 
-          {/* 固定医生列表 */}
+          {/* 固定医生列表和值班医生选择 */}
           <View className="flex flex-col gap-2 mt-2">
             <Text className="block text-sm font-medium text-gray-700">排班医生：</Text>
             <View className="bg-gray-50 rounded-lg p-3">
-              <Text className="block text-xs text-gray-600 mb-2">14位固定医生：</Text>
+              <Text className="block text-xs text-gray-600 mb-2">点击选择值班医生（按选择的顺序值班）：</Text>
               <View className="flex flex-row flex-wrap gap-2">
-                {FIXED_DOCTORS.map((doctor) => (
+                {FIXED_DOCTORS.filter(doctor => doctor !== '邓旦').map((doctor) => (
                   <View
                     key={doctor}
-                    className={`px-2 py-1 rounded text-xs ${
-                      doctor === dutyStartDoctor
+                    className={`px-2 py-1 rounded text-xs cursor-pointer ${
+                      selectedDutyDoctors.includes(doctor)
                         ? 'bg-blue-100 text-blue-700 border border-blue-300'
                         : 'bg-white text-gray-600 border border-gray-300'
                     }`}
+                    onTap={() => {
+                      if (selectedDutyDoctors.includes(doctor)) {
+                        // 取消选择
+                        setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
+                      } else {
+                        // 添加到值班医生列表
+                        setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
+                      }
+                    }}
                   >
                     <Text className="block text-xs">{doctor}</Text>
                   </View>
                 ))}
               </View>
+              {selectedDutyDoctors.length > 0 && (
+                <Text className="block text-xs text-blue-600 mt-2">
+                  已选择值班医生（{selectedDutyDoctors.length}位）：{selectedDutyDoctors.join(' → ')}
+                </Text>
+              )}
             </View>
-          </View>
-
-          {/* 值班起始医生 */}
-          <View className="flex flex-row items-center gap-2 mt-2">
-            <Text className="block text-sm font-medium w-24">值班起始：</Text>
-            {showDutyStartPicker ? (
-              <Picker
-                mode="selector"
-                range={FIXED_DOCTORS}
-                value={FIXED_DOCTORS.indexOf(dutyStartDoctor)}
-                onChange={handleConfirmDutyStartDoctor}
-                onCancel={() => setShowDutyStartPicker(false)}
-              >
-                <View
-                  className="flex-1 bg-blue-100 rounded-lg px-3 py-2.5 border border-blue-300"
-                >
-                  <Text className="block text-sm text-blue-700">{dutyStartDoctor || '选择中...'}</Text>
-                </View>
-              </Picker>
-            ) : (
-              <View
-                className="flex-1 bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200 active:bg-blue-100"
-                onTap={(e) => {
-                  e.stopPropagation()
-                  handleSelectDutyStartDoctor()
-                }}
-              >
-                <Text className="block text-sm text-blue-600">{dutyStartDoctor || '点击选择'}</Text>
-              </View>
-            )}
           </View>
         </View>
       </View>
@@ -747,17 +773,90 @@ const IndexPage = () => {
                 </View>
 
                 {/* 表格内容 */}
-                {FIXED_DOCTORS.map((doctor) => {
+                {[...FIXED_DOCTORS.filter(d => d !== '邓旦'), '邓旦', '一线夜', '二线夜', '三线夜', '补休', '其他'].map((doctor) => {
                   const schedule = scheduleData.doctorSchedule[doctor]
+                  const isDirector = (schedule as any)?.isDirector
+                  const isSpecialRow = (schedule as any)?.isSpecialRow
+                  const isThirdNight = doctor === '三线夜'
+
                   return (
                     <View key={doctor} className="flex flex-row">
-                      <View className="w-24 bg-gray-50 p-2 border border-gray-200" style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#f9fafb' }}>
-                        <Text className="block text-sm font-medium text-center">{doctor}</Text>
+                      <View
+                        className={`w-24 p-2 border border-gray-200 ${isDirector ? 'bg-yellow-50' : isSpecialRow ? 'bg-green-50' : 'bg-gray-50'}`}
+                        style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: isDirector ? '#fefce8' : isSpecialRow ? '#f0fdf4' : '#f9fafb' }}
+                      >
+                        <Text className={`block text-sm font-medium text-center ${isDirector ? 'text-yellow-700' : isSpecialRow ? 'text-green-700' : ''}`}>
+                          {doctor}
+                        </Text>
                       </View>
                       {scheduleData.dates.map((date) => {
                         const shifts = schedule?.shifts[date] || { morning: 'off', afternoon: 'off' }
                         const departments = (schedule as any)?.departmentsByDate?.[date] || { morning: '请输入', afternoon: '请输入' }
                         const hasNightShift = (schedule as any)?.nightShiftsByDate?.[date]
+
+                        // 邓旦医生（科室主任）：不排班，显示为空
+                        if (isDirector) {
+                          return (
+                            <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center bg-gray-50">
+                              <Text className="text-xs text-center text-gray-300">-</Text>
+                            </View>
+                          )
+                        }
+
+                        // 特殊行处理
+                        if (isSpecialRow) {
+                          if (isThirdNight) {
+                            // 三线夜：显示邓旦
+                            return (
+                              <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                                <Text className="text-xs text-center text-green-700">邓旦</Text>
+                              </View>
+                            )
+                          } else if (doctor === '补休' || doctor === '其他') {
+                            // 补休和其他：输入框
+                            return (
+                              <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
+                                <View className="w-full bg-white rounded px-1 py-1">
+                                  <input
+                                    type="text"
+                                    className="w-full text-xs text-center bg-transparent outline-none"
+                                    placeholder="输入"
+                                    value={departments.morning || ''}
+                                    onChange={(e: any) => {
+                                      const newScheduleData = { ...scheduleData }
+                                      newScheduleData.doctorSchedule[doctor].departmentsByDate[date] = {
+                                        morning: e.detail.value,
+                                        afternoon: ''
+                                      }
+                                      setScheduleData(newScheduleData)
+                                    }}
+                                  />
+                                </View>
+                              </View>
+                            )
+                          } else {
+                            // 一线夜和二线夜：可选择医生
+                            return (
+                              <View
+                                key={date}
+                                className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center cursor-pointer active:bg-green-50"
+                                onTap={() => {
+                                  // 打开医生选择弹窗
+                                  setEditingCell({ type: 'doctor', key1: doctor, key2: date })
+                                  const dept = departments.morning || ''
+                                  setSelectedDepartment(dept)
+                                  setShowCellEditModal(true)
+                                }}
+                              >
+                                <Text className={`text-xs text-center whitespace-pre-line ${departments.morning ? 'text-green-600' : 'text-gray-300'}`}>
+                                  {departments.morning || '选择医生'}
+                                </Text>
+                              </View>
+                            )
+                          }
+                        }
+
+                        // 普通医生：正常排班逻辑
                         
                         let shiftText = ''
                         let shiftColor = 'text-gray-400'

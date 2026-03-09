@@ -1,10 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, BorderStyle, TextRun, HeadingLevel, AlignmentType } from 'docx'
 
-// 固定的医生列表（14人）
+// 固定的医生列表（18人，排除邓旦）
 const FIXED_DOCTORS = [
-  '李茜', '姜维', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎', '杨波',
-  '李丹', '黄丹', '邬海燕', '罗丹', '彭粤如', '周晓宇'
+  '杨波', '李丹', '黄丹', '李茜', '陈晓林', '高玲', '曹钰', '朱朝霞', '范冬黎',
+  '周晓宇', '彭粤如', '万佳乐', '姜维', '罗丹', '杨飞娇', '蓝觅', '李卓', '蔡忠凤'
 ]
 
 // 固定排班接口（支持半天班次）
@@ -183,8 +183,8 @@ export interface ScheduleData {
 @Injectable()
 export class ScheduleService {
   private readonly departments = [
-    '1诊室', '2诊室', '4诊室', '5诊室', '9诊室', '10诊室',
-    '妇儿2', '妇儿4', '妇儿前', 'VIP/男2', '男3', '女2'
+    '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
+    '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
   ]
 
   /**
@@ -192,14 +192,14 @@ export class ScheduleService {
    */
   async generateSchedule(
     startDate: string,
-    startDutyDoctor: string,
+    dutyDoctors: string[],
     selectedDepartments: SelectedDepartments,
     fixedSchedule?: FixedSchedule,
     leaveDoctors?: string[] | { doctor: string; dates: string[] }[]
   ): Promise<ScheduleData> {
     console.log('🔴 ===== 开始生成排班表 =====')
     console.log('🔴 起始日期:', startDate)
-    console.log('🔴 起始值班医生:', startDutyDoctor)
+    console.log('🔴 值班医生列表:', dutyDoctors)
     console.log('🔴 选中的科室:', selectedDepartments)
 
     // === 第一阶段：获取页面数据 ===
@@ -214,7 +214,7 @@ export class ScheduleService {
     console.log('🔴 星期列表:', dayNames)
 
     // 验证输入数据
-    this.validateInput(startDutyDoctor, selectedDepartments)
+    this.validateInput(dutyDoctors, selectedDepartments)
 
     // 处理请假数据
     const leaveMap = this.processLeaveDoctors(leaveDoctors)
@@ -223,7 +223,7 @@ export class ScheduleService {
     // === 第二阶段：实例化医生并初始化 ===
     console.log('\n🔴 ===== 第二阶段：实例化医生并初始化 =====')
 
-    // 实例化14个医生
+    // 实例化18个医生
     const doctors = FIXED_DOCTORS.map((name, id) => new Doctor(name, id))
 
     // 初始化医生排班表
@@ -233,7 +233,7 @@ export class ScheduleService {
       })
     })
 
-    console.log('🔴 实例化14个医生完成')
+    console.log('🔴 实例化18个医生完成')
 
     // 初始化7个天
     const days = dayNames.map((dayName, index) => new Day(dates[index], dayName))
@@ -246,7 +246,7 @@ export class ScheduleService {
     // 生成值班医生表
     const dutySchedule = this.generateDutySchedule(
       doctors,
-      startDutyDoctor,
+      dutyDoctors,
       dates,
       dayNames,
       leaveMap,
@@ -292,15 +292,13 @@ export class ScheduleService {
    */
   private generateDutySchedule(
     doctors: Doctor[],
-    startDutyDoctor: string,
+    dutyDoctors: string[],
     dates: string[],
     dayNames: string[],
     leaveMap: Record<string, string[]>,
     fixedSchedule?: FixedSchedule
   ): Record<string, string> {
     const dutySchedule: Record<string, string> = {}
-    const startIndex = FIXED_DOCTORS.indexOf(startDutyDoctor)
-    let currentIndex = startIndex
 
     // 记录每个医生不能值班的剩余天数（确保至少休息1天）
     const doctorDutyBlockDays: Record<string, number> = {}
@@ -308,54 +306,42 @@ export class ScheduleService {
     dates.forEach((date, index) => {
       const dayName = dayNames[index]
 
-      // 每天开始前，减少所有医生的不能值班天数
-      Object.keys(doctorDutyBlockDays).forEach(doctor => {
-        if (doctorDutyBlockDays[doctor] > 0) {
-          doctorDutyBlockDays[doctor]--
-        }
-      })
+      // 从用户选择的值班医生列表中循环选择
+      const dutyDoctor = dutyDoctors[index % dutyDoctors.length]
+      const doctor = doctors.find(d => d.name === dutyDoctor)
 
-      // 找到可以值班的医生
-      let selectedDoctor = ''
-      let attemptCount = 0
-      const maxAttempts = doctors.length * 2
-
-      while (!selectedDoctor && attemptCount < maxAttempts) {
-        const doctor = doctors[currentIndex % doctors.length]
-
-        // 检查是否可以值班
-        const canDuty = this.checkCanDuty(
-          doctor,
-          date,
-          dayName,
-          leaveMap,
-          fixedSchedule,
-          doctorDutyBlockDays
-        )
-
-        if (canDuty) {
-          selectedDoctor = doctor.name
-          doctor.isDutyDoctor = true
-          doctor.dutyDate = date
-          if (index + 1 < dates.length) {
-            doctor.requiredRestDate = dates[index + 1]
-          }
-
-          // 设置该医生不能值班的剩余天数为1
-          doctorDutyBlockDays[doctor.name] = 1
-
-          console.log(`🔴 ${date} (${dayName}) 值班医生: ${doctor.name}`)
-        }
-
-        currentIndex++
-        attemptCount++
+      if (!doctor) {
+        console.error(`🔴 错误：找不到医生 ${dutyDoctor}`)
+        dutySchedule[date] = '未知医生'
+        return
       }
 
-      if (!selectedDoctor) {
-        throw new BadRequestException(`${date} 没有可用的值班医生`)
-      }
+      // 检查是否可以值班
+      const canDuty = this.checkCanDuty(
+        doctor,
+        date,
+        dayName,
+        leaveMap,
+        fixedSchedule,
+        doctorDutyBlockDays
+      )
 
-      dutySchedule[date] = selectedDoctor
+      if (canDuty) {
+        dutySchedule[date] = doctor.name
+        doctor.isDutyDoctor = true
+        doctor.dutyDate = date
+        if (index + 1 < dates.length) {
+          doctor.requiredRestDate = dates[index + 1]
+        }
+
+        // 设置该医生不能值班的剩余天数为1
+        doctorDutyBlockDays[doctor.name] = 1
+
+        console.log(`🔴 ${date} (${dayName}) 值班医生: ${doctor.name}`)
+      } else {
+        console.error(`🔴 错误：医生 ${doctor.name} 无法在 ${date} (${dayName}) 值班`)
+        dutySchedule[date] = '无法值班'
+      }
     })
 
     return dutySchedule
@@ -472,7 +458,7 @@ export class ScheduleService {
       console.log(`\n🔴 ===== ${day.date} (${day.dayOfWeek}) 排班 =====`)
       console.log(`  📊 初始科室池: [${day.departmentPool.join(', ')}]`)
 
-      // Step 1: 值班医生先选科室
+      // Step 1: 值班医生固定分配到1诊室
       const dutyDoctorName = dutySchedule[day.date]
       console.log(`  📊 Step 1 开始：值班医生 = ${dutyDoctorName}`)
       if (dutyDoctorName) {
@@ -480,22 +466,23 @@ export class ScheduleService {
         if (dutyDoctor) {
           console.log(`  📊 值班医生对象: ${dutyDoctor.name}, id=${dutyDoctor.id}`)
           console.log(`  📊 科室池大小: ${day.departmentPool.length}, 内容: [${day.departmentPool.join(', ')}]`)
-          // 从科室池中随机选择一个科室
-          const selectedDept = day.randomDepartment()
-          console.log(`  📊 随机选择的科室: ${selectedDept}`)
-          if (selectedDept) {
-            // 从科室池中移除该科室
-            day.removeDepartment(selectedDept)
-            // 设置值班医生
-            dutyDoctor.schedule[day.dayOfWeek] = { morning: selectedDept, afternoon: selectedDept }
-            dutyDoctor.workDays++
-            dutyDoctor.consecutiveWorkDays++
-            console.log(`  ✅ 值班医生 ${dutyDoctorName} 分配到 ${selectedDept}（全天）`)
-            console.log(`  📊 剩余科室池: [${day.departmentPool.join(', ')}]`)
-          } else {
-            console.log(`  ⚠️ 科室池为空，值班医生 ${dutyDoctorName} 无法分配科室`)
-            console.log(`  ⚠️ 值班医生 ${dutyDoctorName} 的 schedule 保持空字符串！`)
+
+          // 🔴 修改：值班医生固定分配到1诊室
+          const selectedDept = '1诊室'
+
+          // 检查科室池中是否有1诊室
+          const hasOneClinic = day.departmentPool.includes('1诊室')
+          if (hasOneClinic) {
+            // 从科室池中移除1诊室
+            day.removeDepartment('1诊室')
           }
+
+          // 设置值班医生
+          dutyDoctor.schedule[day.dayOfWeek] = { morning: selectedDept, afternoon: selectedDept }
+          dutyDoctor.workDays++
+          dutyDoctor.consecutiveWorkDays++
+          console.log(`  ✅ 值班医生 ${dutyDoctorName} 固定分配到 ${selectedDept}（全天）`)
+          console.log(`  📊 剩余科室池: [${day.departmentPool.join(', ')}]`)
         }
       }
 
@@ -652,12 +639,19 @@ export class ScheduleService {
    * 验证输入数据
    */
   private validateInput(
-    startDutyDoctor: string,
+    dutyDoctors: string[],
     selectedDepartments: SelectedDepartments
   ): void {
-    if (!FIXED_DOCTORS.includes(startDutyDoctor)) {
-      throw new BadRequestException(`起始值班医生"${startDutyDoctor}"不存在`)
+    if (!dutyDoctors || dutyDoctors.length === 0) {
+      throw new BadRequestException('请至少选择一位值班医生')
     }
+
+    // 验证值班医生是否都在固定医生列表中
+    dutyDoctors.forEach(doctor => {
+      if (!FIXED_DOCTORS.includes(doctor)) {
+        throw new BadRequestException(`值班医生"${doctor}"不存在`)
+      }
+    })
 
     const days: (keyof SelectedDepartments)[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     days.forEach(day => {
