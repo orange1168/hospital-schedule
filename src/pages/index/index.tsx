@@ -60,13 +60,13 @@ const IndexPage = () => {
     Saturday: string[]
     Sunday: string[]
   }>({
-    Monday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Tuesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）'],
-    Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
+    Monday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Tuesday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Wednesday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Thursday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Friday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
+    Saturday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室'],
+    Sunday: ['3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室']
   })
 
   // 获取下周一
@@ -616,6 +616,24 @@ const IndexPage = () => {
 
     setLoading(true)
 
+    // 🔴 保存特殊行的数据（一线夜、二线夜、三线夜、补休、其他）
+    const specialRows = ['一线夜', '二线夜', '三线夜', '补休', '其他']
+    const specialRowsData: Record<string, any> = {}
+    specialRows.forEach(rowName => {
+      if (scheduleData?.doctorSchedule[rowName]) {
+        specialRowsData[rowName] = {
+          name: rowName,
+          shifts: {},
+          departmentsByDate: {},
+          isSpecialRow: true
+        }
+        scheduleData.dates.forEach(date => {
+          specialRowsData[rowName].shifts[date] = { ...scheduleData.doctorSchedule[rowName].shifts[date] }
+          specialRowsData[rowName].departmentsByDate[date] = { ...scheduleData.doctorSchedule[rowName].departmentsByDate[date] }
+        })
+      }
+    })
+
     // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
     const fixedSchedule: Record<string, Record<string, {
       morning: string | '请输入' | '休息' | '请假'
@@ -670,10 +688,26 @@ const IndexPage = () => {
             fixedSchedule
           }
         })
-        console.log('排班生成响应:', res.data)
+    console.log('排班生成响应:', res.data)
 
         if (res.data.code === 200) {
-          setScheduleData(res.data.data)
+          // 🔴 恢复特殊行的数据（一线夜、二线夜、三线夜、补休、其他）
+          // 如果后端返回的数据中特殊行的 departmentsByDate 为空，则恢复前端保存的数据
+          const newScheduleData = { ...res.data.data }
+          specialRows.forEach(rowName => {
+            if (specialRowsData[rowName] && newScheduleData.doctorSchedule[rowName]) {
+              const backendData = newScheduleData.doctorSchedule[rowName].departmentsByDate
+              // 检查后端返回的特殊行数据是否为空（所有日期都是空的）
+              const isEmpty = scheduleData.dates.every(
+                date => !backendData[date]?.morning && !backendData[date]?.afternoon
+              )
+              // 如果后端数据为空，则恢复前端保存的数据
+              if (isEmpty || (rowName === '三线夜' && backendData[scheduleData.dates[0]]?.morning !== '邓旦')) {
+                newScheduleData.doctorSchedule[rowName] = specialRowsData[rowName]
+              }
+            }
+          })
+          setScheduleData(newScheduleData)
           Taro.showToast({
             title: '自动填充成功',
             icon: 'success'

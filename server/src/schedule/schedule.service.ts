@@ -167,6 +167,7 @@ interface DoctorSchedule {
   afternoonShiftDays: number
   nightShifts: number
   restDays: number
+  isSpecialRow?: boolean // 标记是否为特殊行（一线夜、二线夜、三线夜、补休、其他）
 }
 
 // 排班数据
@@ -709,6 +710,11 @@ export class ScheduleService {
     })
     const departments = Array.from(allDepartments)
 
+    // 🔴 强制添加 1诊室（值班科室），即使它不在 selectedDepartments 中
+    if (!departments.includes('1诊室')) {
+      departments.push('1诊室')
+    }
+
     console.log('🔴 所有科室:', departments)
 
     const schedule: Record<string, Record<string, ScheduleSlot[]>> = {}
@@ -819,6 +825,34 @@ export class ScheduleService {
       // 休息天数 = 7 - 上午班天数 - 下午班天数
       doctorSchedule[doctor.name].restDays = 
         7 - doctorSchedule[doctor.name].morningShiftDays - doctorSchedule[doctor.name].afternoonShiftDays
+    })
+
+    // 🔴 添加特殊行（一线夜、二线夜、三线夜、补休、其他）
+    const specialRows = ['一线夜', '二线夜', '三线夜', '补休', '其他']
+    specialRows.forEach(rowName => {
+      doctorSchedule[rowName] = {
+        name: rowName,
+        shifts: {},
+        nightShiftsByDate: {},
+        departmentsByDate: {},
+        morningShifts: [],
+        afternoonShifts: [],
+        morningShiftDays: 0,
+        afternoonShiftDays: 0,
+        nightShifts: 0,
+        restDays: 0,
+        isSpecialRow: true
+      }
+      dates.forEach(date => {
+        doctorSchedule[rowName].shifts[date] = {
+          morning: 'off',
+          afternoon: 'off'
+        }
+        doctorSchedule[rowName].departmentsByDate[date] = {
+          morning: rowName === '三线夜' ? '邓旦' : '',
+          afternoon: ''
+        }
+      })
     })
 
     return {
