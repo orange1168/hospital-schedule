@@ -55,7 +55,7 @@ export default defineConfig<'vite'>(async (merge, _env) => {
       PROJECT_DOMAIN: JSON.stringify(
         process.env.PROJECT_DOMAIN ||
           process.env.COZE_PROJECT_DOMAIN_DEFAULT ||
-          '',
+          (process.env.NODE_ENV === 'production' ? 'https://server-production-41cd.up.railway.app' : ''),
       ),
       TARO_ENV: JSON.stringify(process.env.TARO_ENV),
     },
