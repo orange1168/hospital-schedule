@@ -1,8 +1,11 @@
 {
-  "buildCommand": "pnpm build:web",
+  "buildCommand": "node vercel-build.js",
   "outputDirectory": "dist-web",
   "installCommand": "pnpm install",
   "framework": null,
+  "env": {
+    "PROJECT_DOMAIN": "https://server-production-41cd.up.railway.app"
+  },
   "builds": [
     {
       "src": "package.json",
