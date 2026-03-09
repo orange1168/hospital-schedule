@@ -1,12 +1,9 @@
 @import url('tailwindcss');
 
 /*
- * H5 端 rem 适配：与小程序 rpx 缩放一致
- * 375px 屏幕：1rem = 16px，小程序 32rpx = 16px
+ * H5 端 rem 适配：由 Taro 自动计算
+ * 不需要手动设置 font-size
  */
-html {
-  font-size: 4vw !important;
-}
 
 /* 小程序页面容器高度设置，确保垂直居中生效 */
 /* stylelint-disable-next-line selector-type-no-unknown */
