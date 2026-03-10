@@ -80,8 +80,8 @@ const IndexPage = () => {
     Wednesday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
     Thursday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
     Friday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '10诊室', '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'],
-    Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）'],
-    Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
+    Saturday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '妇儿4'],
+    Sunday: ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '妇儿4']
   })
 
   // 获取下周一
@@ -1237,7 +1237,7 @@ const IndexPage = () => {
                             // 检查是否是"休息"或"请假"
                             const morningDept = departments.morning
                             const afternoonDept = departments.afternoon
-                            
+
                             if (morningDept === '休息' && afternoonDept === '休息') {
                               shiftText = '休息'
                               shiftColor = 'text-gray-500'
@@ -1247,6 +1247,10 @@ const IndexPage = () => {
                             } else if (morningDept === '请输入' && afternoonDept === '请输入') {
                               shiftText = '请输入'
                               shiftColor = 'text-gray-300'
+                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入'].includes(morningDept)) {
+                              // 产假、筛查、介入：上下午相同，只显示一个
+                              shiftText = morningDept
+                              shiftColor = 'text-purple-600'
                             } else {
                               // 混合状态（如上午休息，下午请假等）
                               shiftText = `${morningDept}\n${afternoonDept}`
@@ -1262,7 +1266,7 @@ const IndexPage = () => {
                             shiftColor = 'text-blue-600'
                           } else {
                             // 半天上班
-                            shiftText = shifts.morning === 'work' 
+                            shiftText = shifts.morning === 'work'
                               ? `上午：${departments.morning}\n下午：休息`
                               : `上午：休息\n下午：${departments.afternoon}`
                             shiftColor = 'text-orange-600'

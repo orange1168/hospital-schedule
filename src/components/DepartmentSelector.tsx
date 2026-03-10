@@ -14,8 +14,8 @@ const DEFAULT_DEPARTMENTS = [
   '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男2', '女2', '女3'
 ]
 
-// 周末默认科室（前四个）
-const DEFAULT_WEEKEND_DEPARTMENTS = ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）']
+// 周末默认科室（前四个加上妇儿4）
+const DEFAULT_WEEKEND_DEPARTMENTS = ['1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '妇儿4']
 
 interface DepartmentSelectorProps {
   visible: boolean
