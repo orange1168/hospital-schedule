@@ -842,20 +842,31 @@ export class ScheduleService {
         // 🔴 shift.afternoon 是空字符串，departmentsByDate[date].afternoon 已经在初始化时设置为 "休息"
 
         // 添加到schedule数据结构
-        if (shift.morning !== '' && shift.morning !== '休息' && shift.morning !== '请假') {
-          schedule[date][shift.morning].push({
-            doctor: doctor.name,
-            shift: 'morning',
-            department: shift.morning
-          })
+        // 🔴 只有科室才添加到schedule，特殊状态（产假、筛查、介入、休息、请假）不添加
+        if (shift.morning !== '' &&
+            shift.morning !== '休息' &&
+            shift.morning !== '请假' &&
+            !['产假', '筛查', '介入'].includes(shift.morning)) {
+          if (schedule[date][shift.morning]) {
+            schedule[date][shift.morning].push({
+              doctor: doctor.name,
+              shift: 'morning',
+              department: shift.morning
+            })
+          }
         }
 
-        if (shift.afternoon !== '' && shift.afternoon !== '休息' && shift.afternoon !== '请假') {
-          schedule[date][shift.afternoon].push({
-            doctor: doctor.name,
-            shift: 'afternoon',
-            department: shift.afternoon
-          })
+        if (shift.afternoon !== '' &&
+            shift.afternoon !== '休息' &&
+            shift.afternoon !== '请假' &&
+            !['产假', '筛查', '介入'].includes(shift.afternoon)) {
+          if (schedule[date][shift.afternoon]) {
+            schedule[date][shift.afternoon].push({
+              doctor: doctor.name,
+              shift: 'afternoon',
+              department: shift.afternoon
+            })
+          }
         }
 
         // 设置夜班
