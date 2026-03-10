@@ -1348,10 +1348,10 @@ const IndexPage = () => {
             </ScrollView>
           </View>
 
-          {/* 科室排班表（只展示） */}
-          <Text className="block text-lg font-bold mb-3 mt-6 hidden">科室排班表</Text>
-          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm hidden">
-            <Text className="block text-sm text-gray-500 mb-2">根据医生排班自动生成，不可编辑</Text>
+          {/* 科室排班表（只展示，显示指定的8个科室） */}
+          <Text className="block text-lg font-bold mb-3 mt-6">科室排班表</Text>
+          <View className="bg-white rounded-lg p-4 mb-6 shadow-sm">
+            <Text className="block text-sm text-gray-500 mb-2">根据医生排班自动生成，只显示指定科室</Text>
             <ScrollView scrollX className="w-full overflow-x-auto">
               <View className="min-w-max">
                 {/* 表头 */}
@@ -1366,8 +1366,8 @@ const IndexPage = () => {
                   ))}
                 </View>
 
-                {/* 表格内容 */}
-                {scheduleData.departments.map((department) => (
+                {/* 表格内容 - 只显示指定的8个科室 */}
+                {['女1', '女2', '女3', '男1', '男2', '男3', 'VIP1', 'VIP2'].map((department) => (
                   <View key={department} className="flex flex-row">
                     <View className="w-24 bg-gray-50 p-2 border border-gray-200" style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: '#f9fafb' }}>
                       <Text className="block text-sm font-medium text-center">{department}</Text>

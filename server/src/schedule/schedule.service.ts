@@ -993,6 +993,95 @@ export class ScheduleService {
       })
     )
 
+    // 科室排班表（只显示指定的8个科室）
+    children.push(
+      new Paragraph({
+        text: '科室排班表',
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 400, after: 200 }
+      })
+    )
+
+    // 科室排班表指定的科室
+    const departmentList = ['女1', '女2', '女3', '男1', '男2', '男3', 'VIP1', 'VIP2']
+
+    const deptTableRows: TableRow[] = []
+
+    // 表头
+    const deptHeaderRow = new TableRow({
+      children: [
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '科室', bold: true })] })] }),
+        ...datesWithWeek.map(date => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: date, bold: true })] })] }))
+      ]
+    })
+    deptTableRows.push(deptHeaderRow)
+
+    // 遍历科室
+    departmentList.forEach(department => {
+      const rowCells = [new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: department, bold: true })] })] })]
+
+      dates.forEach(date => {
+        const slots = schedule[date]?.[department] || []
+        const dutyDoctor = dutySchedule[date]
+
+        let slotText = ''
+        let slotColor = '000000' // 默认黑色
+
+        if (slots.length === 0) {
+          slotText = '休息'
+          slotColor = '808080' // 灰色
+        } else if (slots.length === 1) {
+          const slot = slots[0]
+          const suffix = slot.shift === 'morning' ? '（上午）' : '（下午）'
+          const isDuty = slot.doctor === dutyDoctor
+          slotText = isDuty ? `${slot.doctor}（值班）` : `${slot.doctor}${suffix}`
+          slotColor = isDuty ? 'FF0000' : '0000FF' // 红色或蓝色
+        } else if (slots.length === 2) {
+          const slot0 = slots[0]
+          const slot1 = slots[1]
+
+          if (slot0.doctor === slot1.doctor) {
+            // 上下午是同一个医生
+            const isDuty = slot0.doctor === dutyDoctor
+            slotText = isDuty ? `${slot0.doctor}（值班）` : slot0.doctor
+            slotColor = isDuty ? 'FF0000' : '0000FF' // 红色或蓝色
+          } else {
+            // 上下午是不同的医生
+            const isDuty0 = slot0.doctor === dutyDoctor
+            const isDuty1 = slot1.doctor === dutyDoctor
+            const text0 = isDuty0 ? `${slot0.doctor}（值班）` : `${slot0.doctor}（${slot0.shift === 'morning' ? '上午' : '下午'}）`
+            const text1 = isDuty1 ? `${slot1.doctor}（值班）` : `${slot1.doctor}（${slot1.shift === 'morning' ? '上午' : '下午'}）`
+            slotText = `${text0}\n${text1}`
+            slotColor = (isDuty0 || isDuty1) ? 'FF0000' : '0000FF' // 红色或蓝色
+          }
+        }
+
+        rowCells.push(new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({
+              text: slotText,
+              color: slotColor
+            })]
+          })]
+        }))
+      })
+
+      deptTableRows.push(new TableRow({ children: rowCells }))
+    })
+
+    children.push(new Table({
+      rows: deptTableRows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1 },
+        bottom: { style: BorderStyle.SINGLE, size: 1 },
+        left: { style: BorderStyle.SINGLE, size: 1 },
+        right: { style: BorderStyle.SINGLE, size: 1 },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1 },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1 }
+      }
+    }))
+
     // 医生排班表
     children.push(
       new Paragraph({
