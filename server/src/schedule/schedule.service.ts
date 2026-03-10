@@ -1028,7 +1028,7 @@ export class ScheduleService {
         let slotColor = '000000' // 默认黑色
 
         if (slots.length === 0) {
-          slotText = '休息'
+          slotText = '' // 🔴 修改：休息显示为空白
           slotColor = '808080' // 灰色
         } else if (slots.length === 1) {
           const slot = slots[0]
@@ -1117,12 +1117,12 @@ export class ScheduleService {
         let shiftColor = '000000' // 默认黑色
 
         if (isDirector) {
-          // 邓旦医生（科室主任）：周一到周五显示"-"，周六周日显示"休息"
+          // 邓旦医生（科室主任）：周一到周五显示"-"，周六周日显示空白
           const dateObj = new Date(date)
           const dayOfWeek = dateObj.getDay()
           if (dayOfWeek === 0 || dayOfWeek === 6) {
             // 周末
-            shiftText = '休息'
+            shiftText = '' // 🔴 修改：周末显示空白
             shiftColor = '808080' // 灰色
           } else {
             // 工作日
@@ -1163,8 +1163,8 @@ export class ScheduleService {
             const dateObj = new Date(date)
             const dayOfWeek = dateObj.getDay()
             if (dayOfWeek === 0 || dayOfWeek === 6) {
-              // 周末休息，显示"-"
-              shiftText = '-'
+              // 周末休息，显示空白
+              shiftText = ''
               shiftColor = 'D3D3D3' // 浅灰色
             } else {
               // 工作日休息，显示"休息"

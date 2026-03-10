@@ -1286,8 +1286,18 @@ const IndexPage = () => {
                             const afternoonDept = departments.afternoon
 
                             if (morningDept === '休息' && afternoonDept === '休息') {
-                              shiftText = '休息'
-                              shiftColor = 'text-gray-500'
+                              // 🔴 修改：检查是否为周末
+                              const dateObj = new Date(date)
+                              const dayOfWeek = dateObj.getDay()
+                              if (dayOfWeek === 0 || dayOfWeek === 6) {
+                                // 周末休息，显示空白
+                                shiftText = ''
+                                shiftColor = 'text-gray-500'
+                              } else {
+                                // 工作日休息，显示"休息"
+                                shiftText = '休息'
+                                shiftColor = 'text-gray-500'
+                              }
                             } else if (morningDept === '请假' && afternoonDept === '请假') {
                               shiftText = '请假'
                               shiftColor = 'text-orange-600'
@@ -1384,7 +1394,7 @@ const IndexPage = () => {
                       const dutyDoctorInDept = slots.some(slot => slot.doctor === dutyDoctor)
 
                       if (slots.length === 0) {
-                        slotText = '休息'
+                        slotText = '' // 🔴 修改：休息显示为空白
                         slotColor = 'text-gray-400'
                       } else if (slots.length === 1) {
                         const suffix = slots[0].shift === 'morning' ? '（上午）' : '（下午）'
