@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '@/app.module';
 import * as express from 'express';
 import { HttpStatusInterceptor } from '@/interceptors/http-status.interceptor';
+import * as path from 'path';
 
 function parsePort(): number {
   const args = process.argv.slice(2);
@@ -30,6 +31,18 @@ async function bootstrap() {
   app.useGlobalInterceptors(new HttpStatusInterceptor());
   // 1. 开启优雅关闭 Hooks (关键!)
   app.enableShutdownHooks();
+
+  // 🔴 静态文件服务：托管前端构建产物
+  const frontendDistPath = path.join(__dirname, '..', '..', 'dist-web');
+  app.use(express.static(frontendDistPath));
+
+  // 🔴 SPA 路由支持：所有非 API 请求都返回 index.html
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
 
   // 2. 解析端口（优先使用 Railway 的 PORT 环境变量）
   const port = process.env.PORT || parsePort();
