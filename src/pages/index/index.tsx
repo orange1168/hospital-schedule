@@ -1580,65 +1580,59 @@ const IndexPage = () => {
       {/* 科室/休息选择弹窗（仅用于医生排班表） */}
       {showCellEditModal && editingCell && editingCell.type === 'doctor' && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <View
-            className="bg-white rounded-lg p-6 mx-4 w-80 max-h-[80vh] overflow-y-auto"
-            style={{
-              WebkitOverflowScrolling: 'touch',
-              touchAction: 'pan-y',
-              overflowX: 'hidden'
-            }}
-          >
-            <Text className="block text-lg font-bold mb-4 text-center">
+          <View className="bg-white rounded-lg mx-4 w-80 max-h-[80vh] flex flex-col">
+            <Text className="px-6 pt-6 pb-4 text-lg font-bold text-center">
               设置排班
             </Text>
-            
-            {/* 班次类型选择 */}
-            <View className="mb-4">
-              <Text className="block text-sm text-gray-600 mb-2">
-                选择班次：
-              </Text>
-              <View className="flex flex-row gap-2">
-                <View
-                  className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'full' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
-                  // 🔴 H5 端兼容：使用 onClick 和 onTap
-                  onClick={() => setSelectedShiftType('full')}
-                  onTap={() => setSelectedShiftType('full')}
-                >
-                  <Text className={`block text-sm ${selectedShiftType === 'full' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
-                    全天
-                  </Text>
-                </View>
-                <View
-                  className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'morning' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
-                  // 🔴 H5 端兼容：使用 onClick 和 onTap
-                  onClick={() => setSelectedShiftType('morning')}
-                  onTap={() => setSelectedShiftType('morning')}
-                >
-                  <Text className={`block text-sm ${selectedShiftType === 'morning' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
-                    上午
-                  </Text>
-                </View>
-                <View
-                  className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'afternoon' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
-                  // 🔴 H5 端兼容：使用 onClick 和 onTap
-                  onClick={() => setSelectedShiftType('afternoon')}
-                  onTap={() => setSelectedShiftType('afternoon')}
-                >
-                  <Text className={`block text-sm ${selectedShiftType === 'afternoon' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
-                    下午
-                  </Text>
+
+            <ScrollView scrollY className="flex-1 px-6 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {/* 班次类型选择 */}
+              <View className="mb-4">
+                <Text className="block text-sm text-gray-600 mb-2">
+                  选择班次：
+                </Text>
+                <View className="flex flex-row gap-2">
+                  <View
+                    className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'full' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    style={{ cursor: 'pointer' }}
+                    // 🔴 H5 端兼容：使用 onClick 和 onTap
+                    onClick={() => setSelectedShiftType('full')}
+                    onTap={() => setSelectedShiftType('full')}
+                  >
+                    <Text className={`block text-sm ${selectedShiftType === 'full' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                      全天
+                    </Text>
+                  </View>
+                  <View
+                    className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'morning' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    style={{ cursor: 'pointer' }}
+                    // 🔴 H5 端兼容：使用 onClick 和 onTap
+                    onClick={() => setSelectedShiftType('morning')}
+                    onTap={() => setSelectedShiftType('morning')}
+                  >
+                    <Text className={`block text-sm ${selectedShiftType === 'morning' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                      上午
+                    </Text>
+                  </View>
+                  <View
+                    className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'afternoon' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    style={{ cursor: 'pointer' }}
+                    // 🔴 H5 端兼容：使用 onClick 和 onTap
+                    onClick={() => setSelectedShiftType('afternoon')}
+                    onTap={() => setSelectedShiftType('afternoon')}
+                  >
+                    <Text className={`block text-sm ${selectedShiftType === 'afternoon' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
+                      下午
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-            
-            <View className="mb-4">
-              <Text className="block text-sm text-gray-600 mb-4">
-                选择科室或状态：
-              </Text>
-              <View className="flex flex-col gap-2">
+
+              <View className="mb-4">
+                <Text className="block text-sm text-gray-600 mb-4">
+                  选择科室或状态：
+                </Text>
+                <View className="flex flex-col gap-2">
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
                   style={{ cursor: 'pointer' }}
@@ -1708,11 +1702,14 @@ const IndexPage = () => {
                     </Text>
                   </View>
                 ))}
+                </View>
               </View>
-            </View>
-            <View className="flex gap-3">
+            </ScrollView>
+            
+            {/* 底部按钮 */}
+            <View className="px-6 pb-6">
               <View
-                className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
+                className="w-full bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
                 style={{ cursor: 'pointer' }}
                 // 🔴 H5 端兼容：使用 onClick 和 onTap
                 onClick={() => {
