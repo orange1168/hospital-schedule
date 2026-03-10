@@ -1580,7 +1580,14 @@ const IndexPage = () => {
       {/* 科室/休息选择弹窗（仅用于医生排班表） */}
       {showCellEditModal && editingCell && editingCell.type === 'doctor' && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <View className="bg-white rounded-lg p-6 mx-4 w-80 max-h-[80vh] overflow-y-auto">
+          <View
+            className="bg-white rounded-lg p-6 mx-4 w-80 max-h-[80vh] overflow-y-auto"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-y',
+              overflowX: 'hidden'
+            }}
+          >
             <Text className="block text-lg font-bold mb-4 text-center">
               设置排班
             </Text>
