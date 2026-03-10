@@ -39,13 +39,15 @@ const FIXED_DOCTORS = [
 // 完整的科室列表
 const DEPARTMENTS = [
   '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
-  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
+  '妇儿2', '妇儿3', '妇儿4', 'VIP1', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3',
+  '产假', '筛查', '介入'
 ]
 
 // 🔴 医生排班表选择的科室列表（不包括1诊室，因为1诊室是值班科室）
 const DOCTOR_DEPARTMENTS = [
   '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
-  '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
+  '妇儿2', '妇儿3', '妇儿4', 'VIP1', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3',
+  '产假', '筛查', '介入'
 ]
 
 const IndexPage = () => {
@@ -121,7 +123,7 @@ const IndexPage = () => {
   const [selectedShiftType, setSelectedShiftType] = useState<'full' | 'morning' | 'afternoon'>('full')
 
   // 🔴 夜班医生列表（二线夜可选医生）
-  const NIGHT_DOCTORS = ['罗丹', '李茜', '高玲']
+  const NIGHT_DOCTORS = ['罗丹', '朱朝霞']
 
   // 获取日期列表（🔴 修改：支持动态天数）
   const getDates = (): string[] => {
@@ -242,7 +244,7 @@ const IndexPage = () => {
           afternoon: 'off'
         }
         doctorSchedule[rowName].departmentsByDate[date] = {
-          morning: rowName === '三线夜' ? '邓旦' : '',
+          morning: rowName === '三线夜' ? '邓旦' : rowName === '二线夜' ? '罗丹' : '',
           afternoon: ''
         }
       })
@@ -1109,6 +1111,7 @@ const IndexPage = () => {
                   const isDirector = (schedule as any)?.isDirector
                   const isSpecialRow = (schedule as any)?.isSpecialRow
                   const isThirdNight = doctor === '三线夜'
+                  const isNightShiftRow = doctor === '一线夜' || doctor === '二线夜' || doctor === '三线夜'
 
                   return (
                     <View key={doctor} className="flex flex-row">
@@ -1116,7 +1119,7 @@ const IndexPage = () => {
                         className={`w-24 p-2 border border-gray-200 ${isDirector ? 'bg-yellow-50' : isSpecialRow ? 'bg-green-50' : 'bg-gray-50'}`}
                         style={{ position: 'sticky', left: 0, zIndex: 10, backgroundColor: isDirector ? '#fefce8' : isSpecialRow ? '#f0fdf4' : '#f9fafb' }}
                       >
-                        <Text className={`block text-sm font-medium text-center ${isDirector ? 'text-yellow-700' : isSpecialRow ? 'text-green-700' : ''}`}>
+                        <Text className={`block text-sm font-medium text-center ${isDirector ? 'text-yellow-700' : isNightShiftRow ? 'text-red-600' : isSpecialRow ? 'text-green-700' : ''}`}>
                           {doctor}{selectedDutyDoctors.includes(doctor) && !isDirector && !isSpecialRow ? ' ⭐' : ''}
                         </Text>
                       </View>
