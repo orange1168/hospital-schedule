@@ -1589,7 +1589,7 @@ const IndexPage = () => {
             }}
           >
             <Text className="px-6 pt-6 pb-4 text-lg font-bold text-center">
-              设置排班 v1.3
+              设置排班 v1.4
             </Text>
 
             <ScrollView

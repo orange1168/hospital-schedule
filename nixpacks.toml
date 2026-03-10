@@ -1,11 +1,8 @@
-[phases.setup]
-nixPkgs = ["nodejs-20_x"]
-
 [phases.build]
 cmds = [
   "pnpm install",
   "pnpm run build:vercel",
-  "cd server && cp -r ../dist-web . && pnpm install && npx nest build && mv dist-web dist/"
+  "cd server && pnpm install && npx nest build && cp -r ../dist-web dist/ && echo 'Build completed with dist-web in dist/'"
 ]
 
 [start]
