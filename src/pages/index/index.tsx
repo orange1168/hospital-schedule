@@ -732,6 +732,41 @@ const IndexPage = () => {
       })
     }
 
+    // 🔴 保存所有普通医生的固定排班数据（包括产假、筛查、介入）
+    const fixedDoctorData: Record<string, any> = {}
+    Object.entries(scheduleData.doctorSchedule).forEach(([doctor, doctorInfo]) => {
+      // 跳过特殊行和邓旦医生
+      if ((doctorInfo as any).isSpecialRow || (doctorInfo as any).isDirector) {
+        return
+      }
+
+      // 检查是否有固定排班（产假、筛查、介入、休息、请假或具体科室）
+      const departmentsByDate = (doctorInfo as any).departmentsByDate
+      const hasFixedSchedule = scheduleData.dates.some(date => {
+        const dept = departmentsByDate[date]
+        const isFixed = dept && (dept.morning !== '请输入' || dept.afternoon !== '请输入')
+        return isFixed
+      })
+
+      if (hasFixedSchedule) {
+        fixedDoctorData[doctor] = {
+          name: doctor,
+          shifts: {},
+          departmentsByDate: {}
+        }
+        scheduleData.dates.forEach(date => {
+          const dept = departmentsByDate[date]
+          // 只保存有固定排班的日期
+          if (dept && (dept.morning !== '请输入' || dept.afternoon !== '请输入')) {
+            fixedDoctorData[doctor].shifts[date] = { ...scheduleData.doctorSchedule[doctor].shifts[date] }
+            fixedDoctorData[doctor].departmentsByDate[date] = { ...dept }
+          }
+        })
+      }
+    })
+
+    console.log('保存的固定医生数据:', Object.keys(fixedDoctorData))
+
     // 🔴 CRITICAL: 将当前的固定排班转换为后端需要的格式（支持半天班次）
     const fixedSchedule: Record<string, Record<string, {
       morning: string | '请输入' | '休息' | '请假'
@@ -809,6 +844,24 @@ const IndexPage = () => {
 
           // 🔴 恢复邓旦医生的数据
           newScheduleData.doctorSchedule['邓旦'] = dengDanData
+
+          // 🔴 恢复所有普通医生的固定排班数据（包括产假、筛查、介入）
+          Object.entries(fixedDoctorData).forEach(([doctor, savedData]) => {
+            if (newScheduleData.doctorSchedule[doctor]) {
+              scheduleData.dates.forEach(date => {
+                if (savedData.departmentsByDate[date]) {
+                  newScheduleData.doctorSchedule[doctor].departmentsByDate[date] = {
+                    ...savedData.departmentsByDate[date]
+                  }
+                  newScheduleData.doctorSchedule[doctor].shifts[date] = {
+                    ...savedData.shifts[date]
+                  }
+                }
+              })
+            }
+          })
+
+          console.log('恢复固定医生数据:', Object.keys(fixedDoctorData))
 
           setScheduleData(newScheduleData)
           setLoading(false)
