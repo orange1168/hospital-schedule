@@ -2,10 +2,15 @@
 nixPkgs = ["nodejs-20_x"]
 
 [phases.build]
-cmds = ["cd server && pnpm install && pnpm build"]
+cmds = [
+  "pnpm install",
+  "pnpm run build:vercel",
+  "cd server && cp -r ../dist-web . && pnpm install && npx nest build && mv dist-web dist/"
+]
 
 [start]
 cmd = "node server/dist/main"
 
 [build.env]
 CI = "true"
+NODE_ENV = "production"
