@@ -102,7 +102,12 @@ const DepartmentSelector = ({ visible, onClose, selectedDepartments, onDepartmen
       <View className="department-selector-modal">
         <View className="department-selector-header">
           <Text className="department-selector-title">科室选择</Text>
-          <View className="department-selector-close" onClick={onClose}>
+          <View
+            className="department-selector-close"
+            // 🔴 H5 端兼容：使用 onClick 和 onTap
+            onClick={onClose}
+            onTap={onClose}
+          >
             <Text className="department-selector-close-icon">×</Text>
           </View>
         </View>
@@ -111,7 +116,9 @@ const DepartmentSelector = ({ visible, onClose, selectedDepartments, onDepartmen
           <Button
             className="department-selector-reset-btn"
             size="mini"
+            // 🔴 H5 端兼容：使用 onClick 和 onTap
             onClick={resetToDefault}
+            onTap={resetToDefault}
           >
             重置为默认
           </Button>
@@ -133,7 +140,10 @@ const DepartmentSelector = ({ visible, onClose, selectedDepartments, onDepartmen
                   <View
                     key={dept}
                     className={`department-checkbox-wrapper ${selectedDepartments[day.key as keyof typeof selectedDepartments].includes(dept) ? 'checked' : ''}`}
+                    style={{ cursor: 'pointer' }}
+                    // 🔴 H5 端兼容：使用 onClick 和 onTap
                     onClick={() => handleToggleDepartment(day.key, dept)}
+                    onTap={() => handleToggleDepartment(day.key, dept)}
                   >
                     <Text className="department-checkbox-text">{dept}</Text>
                   </View>

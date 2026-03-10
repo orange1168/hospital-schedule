@@ -1145,7 +1145,8 @@ const IndexPage = () => {
                         setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
                       }
                     }}
-                    onTap={() => {
+                    onTap={(e) => {
+                      e.stopPropagation()
                       if (selectedDutyDoctors.includes(doctor)) {
                         setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
                       } else {
@@ -1270,8 +1271,14 @@ const IndexPage = () => {
                               <View
                                 key={date}
                                 className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center cursor-pointer active:bg-green-50"
+                                // 🔴 H5 端兼容：使用 onClick 和 onTap
+                                onClick={() => {
+                                  setEditingCell({ type: 'night_doctor', key1: doctor, key2: date })
+                                  const selectedDoc = departments.morning || ''
+                                  setSelectedDoctor(selectedDoc)
+                                  setShowDoctorSelector(true)
+                                }}
                                 onTap={() => {
-                                  // 打开医生选择弹窗
                                   setEditingCell({ type: 'night_doctor', key1: doctor, key2: date })
                                   const selectedDoc = departments.morning || ''
                                   setSelectedDoctor(selectedDoc)
@@ -1362,6 +1369,8 @@ const IndexPage = () => {
                           <View
                             key={date}
                             className={`w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center ${!hasNightShift ? 'cursor-pointer active:bg-blue-50' : ''}`}
+                            // 🔴 H5 端兼容：使用 onClick 和 onTap
+                            onClick={() => !hasNightShift && handleDoctorCellClick(doctor, date)}
                             onTap={() => !hasNightShift && handleDoctorCellClick(doctor, date)}
                           >
                             <Text className={`text-xs text-center whitespace-pre-line ${shiftColor}`}>
@@ -1523,6 +1532,8 @@ const IndexPage = () => {
           <View className="flex flex-row gap-2 mt-6 mb-4">
             <Button
               className="flex-1 bg-purple-500 text-white rounded-lg py-3"
+              // 🔴 H5 端兼容：使用 onClick 和 onTap
+              onClick={() => setShowDepartmentSelector(true)}
               onTap={() => setShowDepartmentSelector(true)}
             >
               科室设置
@@ -1538,6 +1549,8 @@ const IndexPage = () => {
           <View className="flex flex-row gap-2 mb-4">
             <Button
               className="flex-1 bg-green-500 text-white rounded-lg py-3"
+              // 🔴 H5 端兼容：使用 onClick 和 onTap
+              onClick={handleDownloadDoc}
               onTap={handleDownloadDoc}
               disabled={!scheduleData}
             >
@@ -1545,6 +1558,8 @@ const IndexPage = () => {
             </Button>
             <Button
               className="flex-1 bg-red-500 text-white rounded-lg py-3"
+              // 🔴 H5 端兼容：使用 onClick 和 onTap
+              onClick={handleResetSchedule}
               onTap={handleResetSchedule}
             >
               重置
@@ -1578,6 +1593,9 @@ const IndexPage = () => {
               <View className="flex flex-row gap-2">
                 <View
                   className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'full' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => setSelectedShiftType('full')}
                   onTap={() => setSelectedShiftType('full')}
                 >
                   <Text className={`block text-sm ${selectedShiftType === 'full' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
@@ -1586,6 +1604,9 @@ const IndexPage = () => {
                 </View>
                 <View
                   className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'morning' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => setSelectedShiftType('morning')}
                   onTap={() => setSelectedShiftType('morning')}
                 >
                   <Text className={`block text-sm ${selectedShiftType === 'morning' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
@@ -1594,6 +1615,9 @@ const IndexPage = () => {
                 </View>
                 <View
                   className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'afternoon' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => setSelectedShiftType('afternoon')}
                   onTap={() => setSelectedShiftType('afternoon')}
                 >
                   <Text className={`block text-sm ${selectedShiftType === 'afternoon' ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
@@ -1610,6 +1634,9 @@ const IndexPage = () => {
               <View className="flex flex-col gap-2">
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleDepartmentSelect('休息')}
                   onTap={() => handleDepartmentSelect('休息')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '休息' ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
@@ -1618,6 +1645,9 @@ const IndexPage = () => {
                 </View>
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '请假' ? 'bg-orange-50 border-orange-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleDepartmentSelect('请假')}
                   onTap={() => handleDepartmentSelect('请假')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '请假' ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
@@ -1626,6 +1656,9 @@ const IndexPage = () => {
                 </View>
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '产假' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleDepartmentSelect('产假')}
                   onTap={() => handleDepartmentSelect('产假')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '产假' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
@@ -1634,6 +1667,9 @@ const IndexPage = () => {
                 </View>
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '筛查' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleDepartmentSelect('筛查')}
                   onTap={() => handleDepartmentSelect('筛查')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '筛查' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
@@ -1642,6 +1678,9 @@ const IndexPage = () => {
                 </View>
                 <View
                   className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '介入' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleDepartmentSelect('介入')}
                   onTap={() => handleDepartmentSelect('介入')}
                 >
                   <Text className={`block text-sm ${selectedDepartment === '介入' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
@@ -1652,6 +1691,9 @@ const IndexPage = () => {
                   <View
                     key={dept}
                     className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    style={{ cursor: 'pointer' }}
+                    // 🔴 H5 端兼容：使用 onClick 和 onTap
+                    onClick={() => handleDepartmentSelect(dept)}
                     onTap={() => handleDepartmentSelect(dept)}
                   >
                     <Text className={`block text-sm ${selectedDepartment === dept ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
@@ -1664,6 +1706,14 @@ const IndexPage = () => {
             <View className="flex gap-3">
               <View
                 className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
+                style={{ cursor: 'pointer' }}
+                // 🔴 H5 端兼容：使用 onClick 和 onTap
+                onClick={() => {
+                  setShowCellEditModal(false)
+                  setEditingCell(null)
+                  setSelectedDepartment('')
+                  setSelectedShiftType('full')
+                }}
                 onTap={() => {
                   setShowCellEditModal(false)
                   setEditingCell(null)
@@ -1694,6 +1744,9 @@ const IndexPage = () => {
                 <View
                   key={doctor}
                   className={`w-full p-3 border rounded-lg text-center ${selectedDoctor === doctor ? 'bg-green-50 border-green-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleNightDoctorSelect(doctor)}
                   onTap={() => handleNightDoctorSelect(doctor)}
                 >
                   <Text className={`block text-sm ${selectedDoctor === doctor ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
@@ -1703,6 +1756,9 @@ const IndexPage = () => {
               ))}
               <View
                 className={`w-full p-3 border rounded-lg text-center ${selectedDoctor === '' ? 'bg-gray-50 border-gray-400' : 'border-gray-300'}`}
+                style={{ cursor: 'pointer' }}
+                // 🔴 H5 端兼容：使用 onClick 和 onTap
+                onClick={() => handleNightDoctorSelect('')}
                 onTap={() => handleNightDoctorSelect('')}
               >
                 <Text className={`block text-sm ${selectedDoctor === '' ? 'text-gray-600' : 'text-gray-400'}`}>
@@ -1714,6 +1770,13 @@ const IndexPage = () => {
             <View className="flex gap-3">
               <View
                 className="flex-1 bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
+                style={{ cursor: 'pointer' }}
+                // 🔴 H5 端兼容：使用 onClick 和 onTap
+                onClick={() => {
+                  setShowDoctorSelector(false)
+                  setEditingCell(null)
+                  setSelectedDoctor('')
+                }}
                 onTap={() => {
                   setShowDoctorSelector(false)
                   setEditingCell(null)
