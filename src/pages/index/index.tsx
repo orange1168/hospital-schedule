@@ -50,6 +50,12 @@ const DOCTOR_DEPARTMENTS = [
   '产假', '筛查', '介入'
 ]
 
+// 🔴 科室设置弹窗的科室列表（只包括VIP1，不包括产假、筛查、介入）
+const SELECTOR_DEPARTMENTS = [
+  '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
+  '妇儿2', '妇儿3', '妇儿4', 'VIP1', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
+]
+
 const IndexPage = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData | null>(null)
 
@@ -548,6 +554,30 @@ const IndexPage = () => {
       }
 
       // 不更新统计数据
+    } else if (['产假', '筛查', '介入'].includes(department)) {
+      // 特殊状态：产假、筛查、介入（类似于休息、请假）
+      doctorInfo.shifts[date] = {
+        morning: 'off',
+        afternoon: 'off'
+      }
+      ;(doctorInfo as any).departmentsByDate[date] = {
+        morning: department,
+        afternoon: department
+      }
+
+      // 从科室排班表中移除上下午
+      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '请输入' && !['产假', '筛查', '介入'].includes(oldDepartments.morning)) {
+        newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
+          slot => slot.doctor !== doctor || slot.shift === 'afternoon'
+        )
+      }
+      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '请输入' && !['产假', '筛查', '介入'].includes(oldDepartments.afternoon)) {
+        newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
+          slot => slot.doctor !== doctor || slot.shift === 'morning'
+        )
+      }
+
+      // 这些特殊状态不更新统计数据（像请假一样是额外休息）
     } else {
       // 设置科室（根据选择的班次类型）
       const isMorning = selectedShiftType === 'full' || selectedShiftType === 'morning'
@@ -1143,7 +1173,7 @@ const IndexPage = () => {
                             // 三线夜：显示邓旦
                             return (
                               <View key={date} className="w-24 p-2 border border-gray-200 min-h-[50px] flex items-center justify-center">
-                                <Text className="text-xs text-center text-green-700">邓旦</Text>
+                                <Text className="text-xs text-center text-red-600">邓旦</Text>
                               </View>
                             )
                           } else if (doctor === '补休' || doctor === '其他') {
@@ -1182,7 +1212,7 @@ const IndexPage = () => {
                                   setShowDoctorSelector(true)
                                 }}
                               >
-                                <Text className={`text-xs text-center whitespace-pre-line ${departments.morning ? 'text-green-600' : 'text-gray-300'}`}>
+                                <Text className={`text-xs text-center whitespace-pre-line ${departments.morning ? 'text-red-600' : 'text-gray-300'}`}>
                                   {departments.morning || '选择医生'}
                                 </Text>
                               </View>
@@ -1512,6 +1542,30 @@ const IndexPage = () => {
                 >
                   <Text className={`block text-sm ${selectedDepartment === '请假' ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
                     请假
+                  </Text>
+                </View>
+                <View
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '产假' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  onTap={() => handleDepartmentSelect('产假')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '产假' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    产假
+                  </Text>
+                </View>
+                <View
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '筛查' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  onTap={() => handleDepartmentSelect('筛查')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '筛查' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    筛查
+                  </Text>
+                </View>
+                <View
+                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '介入' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  onTap={() => handleDepartmentSelect('介入')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '介入' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    介入
                   </Text>
                 </View>
                 {DOCTOR_DEPARTMENTS.map((dept) => (
