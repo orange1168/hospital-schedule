@@ -1117,17 +1117,18 @@ const IndexPage = () => {
                 {FIXED_DOCTORS.filter(doctor => doctor !== '邓旦').map((doctor) => (
                   <View
                     key={doctor}
-                    className={`px-2 py-1 rounded text-xs cursor-pointer ${
+                    className={`px-2 py-1 rounded text-xs ${
                       selectedDutyDoctors.includes(doctor)
                         ? 'bg-blue-100 text-blue-700 border border-blue-300'
                         : 'bg-white text-gray-600 border border-gray-300'
                     }`}
-                    onTap={() => {
+                    style={{ cursor: 'pointer' }}
+                    // 🔴 H5 端兼容：使用 onClick 和 onTap
+                    onClick={(e) => {
+                      e.stopPropagation()
                       if (selectedDutyDoctors.includes(doctor)) {
-                        // 取消选择
                         setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
                       } else {
-                        // 🔴 修改：添加验证，值班医生数量不能超过排班天数
                         if (startDate && endDate) {
                           const start = new Date(startDate)
                           const end = new Date(endDate)
@@ -1141,8 +1142,26 @@ const IndexPage = () => {
                             return
                           }
                         }
+                        setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
+                      }
+                    }}
+                    onTap={() => {
+                      if (selectedDutyDoctors.includes(doctor)) {
+                        setSelectedDutyDoctors(selectedDutyDoctors.filter(d => d !== doctor))
+                      } else {
+                        if (startDate && endDate) {
+                          const start = new Date(startDate)
+                          const end = new Date(endDate)
+                          const scheduleDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
-                        // 添加到值班医生列表
+                          if (selectedDutyDoctors.length >= scheduleDays) {
+                            Taro.showToast({
+                              title: `只能选择${scheduleDays}位值班医生（排班${scheduleDays}天）`,
+                              icon: 'none'
+                            })
+                            return
+                          }
+                        }
                         setSelectedDutyDoctors([...selectedDutyDoctors, doctor])
                       }
                     }}
