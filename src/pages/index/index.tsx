@@ -1580,12 +1580,27 @@ const IndexPage = () => {
       {/* 科室/休息选择弹窗（仅用于医生排班表） */}
       {showCellEditModal && editingCell && editingCell.type === 'doctor' && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <View className="bg-white rounded-lg mx-4 w-80 max-h-[80vh] flex flex-col">
+          <View
+            className="bg-white rounded-lg mx-4 w-80"
+            style={{
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
             <Text className="px-6 pt-6 pb-4 text-lg font-bold text-center">
               设置排班
             </Text>
 
-            <ScrollView scrollY className="flex-1 px-6 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <ScrollView
+              scrollY
+              className="px-6 pb-6"
+              style={{
+                WebkitOverflowScrolling: 'touch',
+                height: 'calc(80vh - 120px)',
+                overflowY: 'auto'
+              }}
+            >
               {/* 班次类型选择 */}
               <View className="mb-4">
                 <Text className="block text-sm text-gray-600 mb-2">
