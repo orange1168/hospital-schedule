@@ -184,7 +184,7 @@ export interface ScheduleData {
 @Injectable()
 export class ScheduleService {
   private readonly departments = [
-    '1诊室', '3诊室', '4诊室', '5诊室（床旁+术中）', '特需诊室', '9诊室', '10诊室',
+    '1诊室', '3诊室', '4诊室', '5诊室（床旁超声+术中）', '特需诊室', '9诊室', '10诊室',
     '妇儿2', '妇儿3', '妇儿4', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3'
   ]
 
@@ -1059,14 +1059,28 @@ export class ScheduleService {
           const afternoonDept = depts?.afternoon
 
           if (morningDept === '休息' && afternoonDept === '休息') {
-            shiftText = '休息'
-            shiftColor = '808080' // 灰色
+            // 检查是否为周末
+            const dateObj = new Date(date)
+            const dayOfWeek = dateObj.getDay()
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+              // 周末休息，显示"-"
+              shiftText = '-'
+              shiftColor = 'D3D3D3' // 浅灰色
+            } else {
+              // 工作日休息，显示"休息"
+              shiftText = '休息'
+              shiftColor = '808080' // 灰色
+            }
           } else if (morningDept === '请假' && afternoonDept === '请假') {
             shiftText = '请假'
             shiftColor = 'FFA500' // 橙色
           } else if (morningDept === '请输入' && afternoonDept === '请输入') {
             shiftText = '请输入'
             shiftColor = 'D3D3D3' // 浅灰色
+          } else if (morningDept === afternoonDept && ['产假', '筛查', '介入'].includes(morningDept)) {
+            // 产假、筛查、介入：上下午相同，只显示一个
+            shiftText = morningDept
+            shiftColor = '800080' // 紫色
           } else {
             // 混合状态
             shiftText = `${morningDept || '休息'}\n${afternoonDept || '休息'}`
