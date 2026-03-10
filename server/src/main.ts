@@ -33,7 +33,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   // 🔴 静态文件服务：托管前端构建产物
-  const frontendDistPath = path.join(__dirname, '..', '..', 'dist-web');
+  const frontendDistPath = path.join(__dirname, 'dist-web');
   app.use(express.static(frontendDistPath));
 
   // 🔴 SPA 路由支持：所有非 API 请求都返回 index.html

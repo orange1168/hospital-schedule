@@ -4,7 +4,7 @@
   "private": true,
   "description": "NestJS server application",
   "scripts": {
-    "build": "cd .. && pnpm install && pnpm build:vercel && cd server && nest build",
+    "build": "cd .. && pnpm install && pnpm build:vercel && cd server && cp -r ../dist-web . && nest build && mv dist-web dist/",
     "dev": "nest start --watch",
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
