@@ -1581,35 +1581,41 @@ const IndexPage = () => {
       {showCellEditModal && editingCell && editingCell.type === 'doctor' && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <View
-            className="bg-white rounded-lg mx-4 w-80"
+            className="bg-white rounded-lg mx-4"
             style={{
+              width: '320px',
+              maxWidth: 'calc(100vw - 32px)',
               maxHeight: '80vh',
               display: 'flex',
-              flexDirection: 'column'
+              flexDirection: 'column',
+              boxSizing: 'border-box',
+              overflow: 'hidden'
             }}
           >
-            <Text className="px-6 pt-6 pb-4 text-lg font-bold text-center">
+            <Text className="px-4 pt-6 pb-4 text-lg font-bold text-center">
               设置排班（API v2.0）
             </Text>
 
             <ScrollView
               scrollY
-              className="px-6 pb-6"
+              className="px-4 pb-6"
               style={{
                 WebkitOverflowScrolling: 'touch',
                 height: 'calc(80vh - 120px)',
-                overflowY: 'auto'
+                overflowY: 'auto',
+                boxSizing: 'border-box',
+                overflowX: 'hidden'
               }}
             >
               {/* 班次类型选择 */}
-              <View className="mb-4">
+              <View className="mb-4" style={{ boxSizing: 'border-box', overflow: 'hidden' }}>
                 <Text className="block text-sm text-gray-600 mb-2">
                   选择班次：
                 </Text>
-                <View className="flex flex-row gap-2">
+                <View className="flex flex-row gap-2" style={{ boxSizing: 'border-box', overflow: 'hidden' }}>
                   <View
                     className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'full' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', boxSizing: 'border-box', minWidth: 0 }}
                     // 🔴 H5 端兼容：使用 onClick 和 onTap
                     onClick={() => setSelectedShiftType('full')}
                     onTap={() => setSelectedShiftType('full')}
@@ -1620,7 +1626,7 @@ const IndexPage = () => {
                   </View>
                   <View
                     className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'morning' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', boxSizing: 'border-box', minWidth: 0 }}
                     // 🔴 H5 端兼容：使用 onClick 和 onTap
                     onClick={() => setSelectedShiftType('morning')}
                     onTap={() => setSelectedShiftType('morning')}
@@ -1631,7 +1637,7 @@ const IndexPage = () => {
                   </View>
                   <View
                     className={`flex-1 p-2 border rounded-lg text-center text-xs ${selectedShiftType === 'afternoon' ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', boxSizing: 'border-box', minWidth: 0 }}
                     // 🔴 H5 端兼容：使用 onClick 和 onTap
                     onClick={() => setSelectedShiftType('afternoon')}
                     onTap={() => setSelectedShiftType('afternoon')}
@@ -1643,14 +1649,14 @@ const IndexPage = () => {
                 </View>
               </View>
 
-              <View className="mb-4">
+              <View className="mb-4" style={{ boxSizing: 'border-box', overflow: 'hidden' }}>
                 <Text className="block text-sm text-gray-600 mb-4">
                   选择科室或状态：
                 </Text>
-                <View className="flex flex-col gap-2">
+                <View className="flex flex-col gap-2" style={{ boxSizing: 'border-box', overflow: 'hidden' }}>
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '休息' ? 'bg-red-50 border-red-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
                   onClick={() => handleDepartmentSelect('休息')}
                   onTap={() => handleDepartmentSelect('休息')}
@@ -1660,8 +1666,8 @@ const IndexPage = () => {
                   </Text>
                 </View>
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '请假' ? 'bg-orange-50 border-orange-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '请假' ? 'bg-orange-50 border-orange-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
                   onClick={() => handleDepartmentSelect('请假')}
                   onTap={() => handleDepartmentSelect('请假')}
@@ -1671,8 +1677,8 @@ const IndexPage = () => {
                   </Text>
                 </View>
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '产假' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '产假' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
                   onClick={() => handleDepartmentSelect('产假')}
                   onTap={() => handleDepartmentSelect('产假')}
@@ -1682,8 +1688,8 @@ const IndexPage = () => {
                   </Text>
                 </View>
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '筛查' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '筛查' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
                   onClick={() => handleDepartmentSelect('筛查')}
                   onTap={() => handleDepartmentSelect('筛查')}
@@ -1693,8 +1699,8 @@ const IndexPage = () => {
                   </Text>
                 </View>
                 <View
-                  className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === '介入' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
-                  style={{ cursor: 'pointer' }}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '介入' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
                   onClick={() => handleDepartmentSelect('介入')}
                   onTap={() => handleDepartmentSelect('介入')}
@@ -1706,8 +1712,8 @@ const IndexPage = () => {
                 {DOCTOR_DEPARTMENTS.map((dept) => (
                   <View
                     key={dept}
-                    className={`w-full p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
-                    style={{ cursor: 'pointer' }}
+                    className={`p-3 border rounded-lg text-center ${selectedDepartment === dept ? 'bg-blue-50 border-blue-500' : 'border-gray-300'}`}
+                    style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                     // 🔴 H5 端兼容：使用 onClick 和 onTap
                     onClick={() => handleDepartmentSelect(dept)}
                     onTap={() => handleDepartmentSelect(dept)}
@@ -1722,10 +1728,10 @@ const IndexPage = () => {
             </ScrollView>
             
             {/* 底部按钮 */}
-            <View className="px-6 pb-6">
+            <View className="px-4 pb-6" style={{ boxSizing: 'border-box' }}>
               <View
-                className="w-full bg-gray-200 text-gray-700 rounded-lg py-3 text-center cursor-pointer"
-                style={{ cursor: 'pointer' }}
+                className="p-3 border rounded-lg text-center bg-gray-200 text-gray-700"
+                style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                 // 🔴 H5 端兼容：使用 onClick 和 onTap
                 onClick={() => {
                   setShowCellEditModal(false)
