@@ -25,6 +25,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box; /* 确保 padding 包含在宽度内 */
   animation: slideDown 0.3s ease-out;
 }
 
@@ -122,6 +123,8 @@
   padding: 16px;
   margin-bottom: 16px;
   border: 1px solid #e5e7eb;
+  box-sizing: border-box; /* 确保 padding 包含在宽度内 */
+  overflow: hidden; /* 防止子元素溢出 */
 }
 
 .department-selector-day:last-child {
@@ -167,6 +170,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  overflow: hidden; /* 防止子元素溢出 */
 }
 
 /* 科室选项 */
@@ -174,13 +178,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
+  padding: 8px 12px;
   background-color: #f9fafb;
   border: 1.5px solid #e5e7eb;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 80px;
+  min-width: 70px;
+  max-width: 140px; /* 限制最大宽度 */
+  box-sizing: border-box; /* 确保 padding 包含在宽度内 */
 }
 
 .department-checkbox-wrapper:active {
@@ -196,6 +202,13 @@
   font-size: 14px;
   color: #374151;
   font-weight: 500;
+  word-wrap: break-word; /* 允许长文本换行 */
+  word-break: break-all; /* 强制换行 */
+  overflow-wrap: break-word; /* 标准属性 */
+  line-height: 1.2; /* 调整行高 */
+  text-align: center; /* 居中对齐 */
+  width: 100%; /* 确保文本占满容器 */
+  box-sizing: border-box;
 }
 
 .department-checkbox-wrapper.checked .department-checkbox-text {

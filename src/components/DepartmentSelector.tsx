@@ -145,7 +145,9 @@ const DepartmentSelector = ({ visible, onClose, selectedDepartments, onDepartmen
                     onClick={() => handleToggleDepartment(day.key, dept)}
                     onTap={() => handleToggleDepartment(day.key, dept)}
                   >
-                    <Text className="department-checkbox-text">{dept}</Text>
+                    <Text className="department-checkbox-text" numberOfLines={3}>
+                      {dept}
+                    </Text>
                   </View>
                 ))}
               </View>
