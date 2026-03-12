@@ -47,7 +47,7 @@ const DEPARTMENTS = [
 const DOCTOR_DEPARTMENTS = [
   '3诊室', '4诊室', '5诊室（床旁超声+术中）', '特需诊室', '9诊室', '10诊室',
   '妇儿2', '妇儿3', '妇儿4', 'VIP1', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3',
-  '产假', '筛查', '介入'
+  '3半', '4半', '5全'
 ]
 
 const IndexPage = () => {
@@ -1677,36 +1677,36 @@ const IndexPage = () => {
                   </Text>
                 </View>
                 <View
-                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '产假' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '3半' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
                   style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
-                  onClick={() => handleDepartmentSelect('产假')}
-                  onTap={() => handleDepartmentSelect('产假')}
+                  onClick={() => handleDepartmentSelect('3半')}
+                  onTap={() => handleDepartmentSelect('3半')}
                 >
-                  <Text className={`block text-sm ${selectedDepartment === '产假' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
-                    产假
+                  <Text className={`block text-sm ${selectedDepartment === '3半' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    3半
                   </Text>
                 </View>
                 <View
-                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '筛查' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '4半' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
                   style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
-                  onClick={() => handleDepartmentSelect('筛查')}
-                  onTap={() => handleDepartmentSelect('筛查')}
+                  onClick={() => handleDepartmentSelect('4半')}
+                  onTap={() => handleDepartmentSelect('4半')}
                 >
-                  <Text className={`block text-sm ${selectedDepartment === '筛查' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
-                    筛查
+                  <Text className={`block text-sm ${selectedDepartment === '4半' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    4半
                   </Text>
                 </View>
                 <View
-                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '介入' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '5全' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
                   style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
                   // 🔴 H5 端兼容：使用 onClick 和 onTap
-                  onClick={() => handleDepartmentSelect('介入')}
-                  onTap={() => handleDepartmentSelect('介入')}
+                  onClick={() => handleDepartmentSelect('5全')}
+                  onTap={() => handleDepartmentSelect('5全')}
                 >
-                  <Text className={`block text-sm ${selectedDepartment === '介入' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
-                    介入
+                  <Text className={`block text-sm ${selectedDepartment === '5全' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    5全
                   </Text>
                 </View>
                 {DOCTOR_DEPARTMENTS.map((dept) => (
