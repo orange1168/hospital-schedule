@@ -548,8 +548,8 @@ const IndexPage = () => {
       }
 
       // 不更新统计数据
-    } else if (['产假', '筛查', '介入'].includes(department)) {
-      // 特殊状态：产假、筛查、介入（类似于休息、请假）
+    } else if (['产假', '筛查', '介入', '3半', '4半', '5全'].includes(department)) {
+      // 特殊状态：产假、筛查、介入、3半、4半、5全（类似于休息、请假）
       doctorInfo.shifts[date] = {
         morning: 'off',
         afternoon: 'off'
@@ -560,12 +560,12 @@ const IndexPage = () => {
       }
 
       // 从科室排班表中移除上下午
-      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '请输入' && !['产假', '筛查', '介入'].includes(oldDepartments.morning)) {
+      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '请输入' && !['产假', '筛查', '介入', '3半', '4半', '5全'].includes(oldDepartments.morning)) {
         newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
           slot => slot.doctor !== doctor || slot.shift === 'afternoon'
         )
       }
-      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '请输入' && !['产假', '筛查', '介入'].includes(oldDepartments.afternoon)) {
+      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '请输入' && !['产假', '筛查', '介入', '3半', '4半', '5全'].includes(oldDepartments.afternoon)) {
         newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
           slot => slot.doctor !== doctor || slot.shift === 'morning'
         )
@@ -1330,8 +1330,8 @@ const IndexPage = () => {
                             } else if (morningDept === '请输入' && afternoonDept === '请输入') {
                               shiftText = '请输入'
                               shiftColor = 'text-gray-300'
-                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入'].includes(morningDept)) {
-                              // 产假、筛查、介入：上下午相同，只显示一个
+                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入', '3半', '4半', '5全'].includes(morningDept)) {
+                              // 产假、筛查、介入、3半、4半、5全：上下午相同，只显示一个
                               shiftText = morningDept
                               shiftColor = 'text-purple-600'
                             } else {
