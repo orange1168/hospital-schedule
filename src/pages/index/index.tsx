@@ -1330,10 +1330,14 @@ const IndexPage = () => {
                             } else if (morningDept === '请输入' && afternoonDept === '请输入') {
                               shiftText = '请输入'
                               shiftColor = 'text-gray-300'
-                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入', '3半', '4半', '5全'].includes(morningDept)) {
-                              // 产假、筛查、介入、3半、4半、5全：上下午相同，只显示一个
+                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入'].includes(morningDept)) {
+                              // 产假、筛查、介入：上下午相同，只显示一个
                               shiftText = morningDept
                               shiftColor = 'text-purple-600'
+                            } else if (morningDept === afternoonDept && ['3半', '4半', '5全'].includes(morningDept)) {
+                              // 3半、4半、5全：上下午相同，只显示一个，使用蓝色（和普通科室一致）
+                              shiftText = morningDept
+                              shiftColor = 'text-blue-600'
                             } else {
                               // 混合状态（如上午休息，下午请假等）
                               shiftText = `${morningDept}\n${afternoonDept}`
