@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
 const isDev = require('electron-is-dev')
+const { createTray } = require('./tray')
 
 let mainWindow
 
