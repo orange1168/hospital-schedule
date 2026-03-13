@@ -40,7 +40,7 @@ const FIXED_DOCTORS = [
 const DEPARTMENTS = [
   '1诊室', '3诊室', '4诊室', '5诊室（床旁超声+术中）', '特需诊室', '9诊室', '10诊室',
   '妇儿2', '妇儿3', '妇儿4', 'VIP1', 'VIP2', '男1', '男2', '男3', '女1', '女2', '女3',
-  '产假', '筛查', '介入'
+  '产假', '筛查', '介入', '资料'
 ]
 
 // 🔴 医生排班表选择的科室列表（不包括1诊室，因为1诊室是值班科室）
@@ -548,8 +548,8 @@ const IndexPage = () => {
       }
 
       // 不更新统计数据
-    } else if (['产假', '筛查', '介入', '3半', '4半', '5全'].includes(department)) {
-      // 特殊状态：产假、筛查、介入、3半、4半、5全（类似于休息、请假）
+    } else if (['产假', '筛查', '介入', '资料', '3半', '4半', '5全'].includes(department)) {
+      // 特殊状态：产假、筛查、介入、资料、3半、4半、5全（类似于休息、请假）
       doctorInfo.shifts[date] = {
         morning: 'off',
         afternoon: 'off'
@@ -560,12 +560,12 @@ const IndexPage = () => {
       }
 
       // 从科室排班表中移除上下午
-      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '请输入' && !['产假', '筛查', '介入', '3半', '4半', '5全'].includes(oldDepartments.morning)) {
+      if (oldDepartments?.morning && oldDepartments.morning !== '休息' && oldDepartments.morning !== '请假' && oldDepartments.morning !== '请输入' && !['产假', '筛查', '介入', '资料', '3半', '4半', '5全'].includes(oldDepartments.morning)) {
         newScheduleData.schedule[date][oldDepartments.morning] = newScheduleData.schedule[date][oldDepartments.morning].filter(
           slot => slot.doctor !== doctor || slot.shift === 'afternoon'
         )
       }
-      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '请输入' && !['产假', '筛查', '介入', '3半', '4半', '5全'].includes(oldDepartments.afternoon)) {
+      if (oldDepartments?.afternoon && oldDepartments.afternoon !== '休息' && oldDepartments.afternoon !== '请假' && oldDepartments.afternoon !== '请输入' && !['产假', '筛查', '介入', '资料', '3半', '4半', '5全'].includes(oldDepartments.afternoon)) {
         newScheduleData.schedule[date][oldDepartments.afternoon] = newScheduleData.schedule[date][oldDepartments.afternoon].filter(
           slot => slot.doctor !== doctor || slot.shift === 'morning'
         )
@@ -1330,8 +1330,8 @@ const IndexPage = () => {
                             } else if (morningDept === '请输入' && afternoonDept === '请输入') {
                               shiftText = '请输入'
                               shiftColor = 'text-gray-300'
-                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入'].includes(morningDept)) {
-                              // 产假、筛查、介入：上下午相同，只显示一个
+                            } else if (morningDept === afternoonDept && ['产假', '筛查', '介入', '资料'].includes(morningDept)) {
+                              // 产假、筛查、介入、资料：上下午相同，只显示一个
                               shiftText = morningDept
                               shiftColor = 'text-purple-600'
                             } else if (morningDept === afternoonDept && ['3半', '4半', '5全'].includes(morningDept)) {
@@ -1711,6 +1711,17 @@ const IndexPage = () => {
                 >
                   <Text className={`block text-sm ${selectedDepartment === '介入' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
                     介入
+                  </Text>
+                </View>
+                <View
+                  className={`p-3 border rounded-lg text-center ${selectedDepartment === '资料' ? 'bg-purple-50 border-purple-500' : 'border-gray-300'}`}
+                  style={{ cursor: 'pointer', boxSizing: 'border-box', width: '100%' }}
+                  // 🔴 H5 端兼容：使用 onClick 和 onTap
+                  onClick={() => handleDepartmentSelect('资料')}
+                  onTap={() => handleDepartmentSelect('资料')}
+                >
+                  <Text className={`block text-sm ${selectedDepartment === '资料' ? 'text-purple-600 font-medium' : 'text-gray-600'}`}>
+                    资料
                   </Text>
                 </View>
                 {DOCTOR_DEPARTMENTS.map((dept) => (
