@@ -1,0 +1,25 @@
+{
+  "appId": "com.hospital.schedule",
+  "productName": "医院排班系统",
+  "directories": {
+    "output": "dist/electron"
+  },
+  "files": [
+    "electron/**/*",
+    "dist-web/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": false
+  }
+}
