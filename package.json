@@ -9,10 +9,13 @@
     "build:weapp": "taro build --type weapp",
     "build:web": "taro build --type h5",
     "build:vercel": "cross-env PROJECT_DOMAIN=https://server-production-41cd.up.railway.app taro build --type h5",
+    "build:electron": "pnpm build:web && electron-builder",
+    "build:electron:dir": "pnpm build:web && electron-builder --dir",
     "dev": "pnpm exec concurrently -n web,server -c blue,green \"pnpm dev:web\" \"PORT=3000 pnpm dev:server\"",
     "dev:server": "pnpm --filter server dev",
     "dev:weapp": "taro build --type weapp --watch",
     "dev:web": "taro build --type h5 --watch",
+    "dev:electron": "electron .",
     "preinstall": "npx only-allow pnpm",
     "postinstall": "weapp-tw patch",
     "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
@@ -67,6 +70,9 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-is-dev": "^2.0.0",
     "eslint": "^8.57.0",
     "eslint-config-taro": "4.1.9",
     "eslint-plugin-react": "^7.34.1",
@@ -94,5 +100,39 @@
     "typescript": true,
     "css": "Less",
     "framework": "React"
+  },
+  "main": "electron/main.js",
+  "build": {
+    "appId": "com.hospital.schedule",
+    "productName": "医院排班系统",
+    "directories": {
+      "output": "dist/electron"
+    },
+    "files": [
+      "electron/**/*",
+      "dist-web/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.png",
+      "uninstallerIcon": "build/icon.png",
+      "installerHeaderIcon": "build/icon.png",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
